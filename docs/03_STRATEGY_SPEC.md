@@ -66,8 +66,20 @@ retest and the retest holds in the candidate direction. A complete return into
 the pre-event range invalidates the setup.
 
 Version 1 represents the retest result explicitly in `MarketSnapshot`. Phase 2
-must implement the deterministic feature builder from broker ticks/bars and add
-fixture-based tests.
+implements it as follows:
+
+- use the first midpoint strictly outside the range after the 90-second shock
+  window as breakout evidence;
+- accept the first retest that remains outside and approaches the broken
+  boundary to within one broker tick;
+- require the following ordered primary tick to hold beyond that one-tick
+  boundary;
+- invalidate immediately if price enters the complete range, and classify a
+  direct break of the opposite boundary as a whipsaw;
+- use the opposite pre-event range boundary as the conservative initial stop.
+
+Midpoints identify price structure only. Entries and exits always use the
+executable bid or ask.
 
 ## Gate 3: Cross-asset confirmation
 
@@ -129,6 +141,12 @@ The MVP exit engine will implement:
 Exit details are Phase 2 work and must be represented identically in replay and
 demo. Moving a stop farther from entry is forbidden.
 
+Phase 2 enables hard stop, complete range reclaim, emergency exit, and explicit
+UTC session cutoff with that precedence. Long exits use bid and short exits use
+ask. Partial realization near `+2R` and trailing remain disabled pending replay
+validation and a versioned strategy decision; no unvalidated numeric rule is
+silently introduced.
+
 ## Pyramiding
 
 Pyramiding is post-MVP. If later approved, an addition is allowed only when the
@@ -145,4 +163,3 @@ entry in a long or above it in a short merely to improve average price.
 - event time or identity changes;
 - another setup already consumed the event cluster;
 - a risk lock activates.
-

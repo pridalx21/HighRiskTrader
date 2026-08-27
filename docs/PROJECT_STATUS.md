@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 1: deterministic domain and decision core complete.
+Phase 2: deterministic event replay and market features complete.
 
 ## Completed
 
@@ -32,14 +32,28 @@ Phase 1: deterministic domain and decision core complete.
 - Accepted and rejected decisions serialize deterministically and contain the
   same configuration hash.
 - Fake broker contract metadata port and fail-closed MT5 placeholder completed.
+- Strict UTC/Decimal JSON contracts for raw bid/ask ticks and bars completed.
+- Deterministic features now reconstruct highest ask, lowest bid, median spread,
+  true-range evidence, first breakout/retest/hold, range reclaim, whipsaw, and
+  timestamped cross-asset votes.
+- A stable replay clock orders events, completed bars, and ticks independently
+  of fixture input order.
+- Replay execution records executable-side fills, latency, spread, adverse
+  slippage, commission, rejection, missed fills, and step-rounded partial fills.
+- The shared pure intraday exit engine implements emergency, protective stop,
+  complete-range reclaim, and UTC cutoff precedence and forbids stop widening.
+- Seven synthetic scenarios use the unchanged public `DecisionPipeline` and
+  export one byte-stable canonical JSON report with raw inputs, decisions,
+  execution, exits, costs, P&L/R, and SHA-256 hashes.
+- ADR-008 through ADR-011 record the Phase 2 storage, feature, execution, and
+  exit decisions.
 
 ## Not implemented
 
-- Historical market feature builder and replay engine.
 - CSV/provider event adapter.
 - Persistent journal and restart reconciliation.
 - MT5 market-data and order adapter.
-- Exit engine, dashboard, and kill switch.
+- Dashboard and kill switch.
 - Strategy validation harness.
 
 ## Resolved discrepancies
@@ -58,7 +72,6 @@ rounding, configuration, and deterministic-serialization gaps.
 
 The remaining differences are planned work, not enabled behavior:
 
-- Phase 2: reconstructable market features, replay, exits, and realistic costs.
 - Phase 3: persistent idempotency, journal, CSV calendar, and restart
   reconciliation.
 - Phases 4-6: MT5 demo adapter, kill switch/dashboard, and validation harness.
@@ -83,30 +96,36 @@ identity is configured as explicitly provided by the operator.
 - Session cutoff per logical instrument.
 - Historical data source and licensing for validation.
 
-None of these blocks Phase 0 or Phase 1.
+None of these permits weakening the demo-only or fail-closed rules.
 
 ## Next task
 
-Push the verified local `main` branch after interactive GitHub authentication,
-then start `prompts/02_replay_engine.md` with a multi-component execution plan
-based on `PLANS.md`.
+Start `prompts/03_event_data_and_journal.md`: implement strict event ingestion,
+the persistent append-only journal, durable idempotency, and restart
+reconciliation without adding MT5 or a live path.
 
 ## Last verification
 
 ```text
 Date: 2026-08-27
-Commit: Initial Phase 1 commit on local main; remote push pending authentication
 Environment: Microsoft Windows NT 10.0.26200.0 AMD64; PowerShell 5.1.26100.9168
 Python: 3.14.4
 Commands:
   powershell -ExecutionPolicy Bypass -File scripts/verify.ps1
-  $env:PYTHONPATH = "src"; python -m compileall -q src tests
+  $env:PYTHONPATH = "src"; python -m catalyst.replay_demo
+  $env:PYTHONPATH = "src"; python -m compileall -q src tests scripts
+  Repeated canonical replay byte/hash comparison
   Repository scans for live/order/network/clock/float bypasses, secrets,
   generated artifacts, trailing whitespace, and Python lines over 100 columns
 Result:
-  Phase 1 baseline: 98 tests passed.
-  Demo: state=ready, maximum_loss_chf=49.14, broker_receipt=ACCEPTED, and a
-  deterministic 64-character configuration hash was emitted.
+  Complete suite: 131 tests passed.
+  Demo: state=ready with an accepted fake-broker bracket and mandatory stop.
+  Replay: all 7 exact expected outcomes matched.
+  Configuration hash:
+    5419b8328d95605edb14ee2e70421a03a8a0b7aafd454b8dbe80edbd962010f5
+  Canonical report hash:
+    291994ff87ee609a2793e2050ac2b5001cfae675b59debecfdbdf562a5006d6e
+  Canonical report length: 35,343 UTF-8 bytes.
 Optional tools:
   ruff, mypy, and pytest were not installed; no optional check was claimed.
 ```

@@ -32,6 +32,8 @@ flowchart TD
 | Event-feed port | Supply normalized scheduled events | Parse arbitrary prose in core |
 | Broker port | Account state and bracket submission | Weaken or override risk decisions |
 | Replay adapter | Feed historical inputs to the same pipeline | Reimplement strategy rules |
+| Feature builder | Derive snapshots from ordered bid/ask evidence | Submit orders or alter risk |
+| Exit engine | Evaluate explicit intraday exits from supplied quotes/time | Read a clock or widen stops |
 | Journal | Append decisions, orders, fills, and state | Mutate historical records |
 | Dashboard | Display and request safe control actions | Create numeric order parameters |
 
@@ -43,6 +45,7 @@ src/catalyst/
   strategy/     Event Reaction Retest rules
   risk/         locks, sizing, and invariants
   engine/       state machine and decision pipeline
+  replay/       raw fixtures, feature builder, clock, execution, reports
   ports/        protocols for external systems
   adapters/     fake, replay, MT5, calendar, and storage implementations
 ```
@@ -64,6 +67,12 @@ decision = pipeline.evaluate(
 It must not call `datetime.now()`, random functions, network clients, MT5, or a
 database. That makes the same decision callable by unit tests, event replay,
 and demo execution.
+
+The Phase 2 replay adapter serially composes `MarketFeatureBuilder`, the public
+`DecisionPipeline`, `ReplayExecutionModel`, and `IntradayExitEngine`. It does
+not contain a vectorized copy of strategy or risk rules. Replay supplies every
+timestamp explicitly and orders equal timestamps by record type, logical
+symbol, and source sequence.
 
 ## Event lifecycle
 

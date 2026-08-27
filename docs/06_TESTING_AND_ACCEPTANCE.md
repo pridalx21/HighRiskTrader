@@ -48,6 +48,15 @@ No contract test uses a real-money account.
 - Replay uses executable bid/ask sides, not midpoint fantasy fills.
 - A decision generated in replay matches the live-demo pipeline fields.
 
+The Phase 2 acceptance suite fixes seven synthetic cases: long pass, short
+pass, whipsaw, stale data, spread spike, missing confirmation, and late setup.
+It asserts the exact decision code, direction, execution status, and exit
+reason. Focused tests additionally cover equal-timestamp ordering, latency,
+adverse-slippage misses, deterministic rejection, partial-fill rounding,
+executable bid/ask sides, hard stops, range reclaim, emergency precedence,
+cutoff, stale exit quotes, and the stop-widening prohibition. Repeated complete
+reports must be byte-identical.
+
 ### Demo forward tests
 
 - Demo balance set to approximately CHF 1,000.
@@ -61,6 +70,7 @@ No contract test uses a real-money account.
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m catalyst.demo
+PYTHONPATH=src python -m catalyst.replay_demo
 ```
 
 With development tools installed:
@@ -127,4 +137,3 @@ These are conservative review gates, not return promises:
 
 Failure of a gate means revise or stop. It does not justify increasing leverage
 or optimizing more parameters.
-

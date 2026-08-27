@@ -79,6 +79,61 @@ Never rewrite an accepted entry; append a superseding decision.
   below-minimum/above-maximum volume, and post-cost over-risk plans fail closed.
   The MT5 adapter must normalize and verify these fields in Phase 4.
 
+## ADR-008: Standard-library JSON replay boundary for Phase 2
+
+- **Status:** Accepted
+- **Context:** A reconstructable replay is needed before a historical provider,
+  licensed dataset, or persistence schema has been selected. Adding Parquet now
+  would create an unneeded production dependency and imply a premature schema.
+- **Decision:** Use strict checked-in JSON fixtures with UTC strings and decimal
+  strings, and export canonical JSON reports. Defer Parquet and SQLite to the
+  provider and journal slices.
+- **Consequences:** The Phase 2 baseline stays install-free and byte-stable.
+  The domain remains storage-independent; a future adapter may add Parquet only
+  with a dependency rationale and contract tests.
+
+## ADR-009: Deterministic v1 market feature definitions
+
+- **Status:** Accepted
+- **Context:** Breakout, retest, reclaim, ATR, and related-market votes must be
+  reconstructable and cannot depend on subjective chart reading.
+- **Decision:** Use the first post-shock midpoint outside the highest-ask/
+  lowest-bid range, a first outside retest within one tick of the broken edge,
+  and the next outside tick as hold. Any full return inside invalidates; an
+  opposite-side break is a whipsaw. Median pre-event spread, mean bid/ask-mid
+  true range, and explicit polarity/minimum-move votes are stored as evidence.
+- **Consequences:** The same raw input has one ordered result. These are starting
+  hypotheses, not evidence of edge; changes require strategy versioning.
+
+## ADR-010: Executable-side deterministic replay fills
+
+- **Status:** Accepted
+- **Context:** Midpoint fills omit the spread and overstate achievable execution.
+- **Decision:** Long entries fill at ask, short entries at bid, long exits at
+  bid, and short exits at ask. The first quote after explicit latency is used;
+  adverse-slippage limits, deterministic rejection, missed quotes, volume-step
+  partial fills, and commission are recorded without randomness.
+- **Consequences:** Every fill or skipped fill is auditable and reproducible.
+  This model is deliberately conservative but is not a broker-fill guarantee.
+  Contract commission is normalized to a total round-trip amount per volume so
+  risk sizing and replay P&L use the same cost meaning.
+  The replay adverse-slippage limit cannot exceed the contract allowance used
+  for worst-case sizing.
+
+## ADR-011: Conservative Phase 2 intraday exit scope
+
+- **Status:** Accepted
+- **Context:** The strategy mentions partial realization and trailing only
+  after replay validation, while hard protection and intraday closure are
+  immediate safety requirements.
+- **Decision:** Share one pure exit engine for replay and later demo adapters.
+  Precedence is emergency, protective stop, complete range reclaim, then UTC
+  session cutoff. Stops may tighten but never widen. Partial `+2R` realization
+  and trailing are disabled.
+- **Consequences:** Phase 2 has deterministic same-day closure without inventing
+  unvalidated optimization parameters. Enabling partial/trailing requires a
+  versioned decision and new replay evidence.
+
 ## Template
 
 ```text

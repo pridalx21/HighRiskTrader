@@ -33,6 +33,7 @@ starter tests.
 $env:PYTHONPATH = "src"
 python -m unittest discover -s tests -v
 python -m catalyst.demo
+python -m catalyst.replay_demo
 ```
 
 Or run:
@@ -46,6 +47,7 @@ powershell -ExecutionPolicy Bypass -File scripts/verify.ps1
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m catalyst.demo
+PYTHONPATH=src python -m catalyst.replay_demo
 ```
 
 Or run:
@@ -130,8 +132,21 @@ The starter includes:
 - a deterministic demonstration command;
 - the full implementation roadmap.
 
-The real calendar feed, market feature builder, replay store, MT5 order adapter,
-and dashboard are intentionally left for the ordered Codex phases.
+The current implementation also includes a strict UTC/Decimal JSON fixture
+boundary, bid/ask feature reconstruction, stable replay clock, execution and
+intraday exit models, seven synthetic scenarios, and a canonical JSON report.
+The real calendar feed, journal, MT5 order adapter, and dashboard remain for
+the ordered Codex phases.
+
+## Phase 2 deterministic replay
+
+Run `python -m catalyst.replay_demo` with `PYTHONPATH=src` to replay the seven
+checked-in cases under `tests/data/replay`. The command fails when any exact
+expected outcome differs and otherwise prints one complete canonical report.
+Every report contains the raw fixture, derived evidence, public-pipeline
+decision, executable-side fill or explicit absence of execution, exit, costs,
+configuration hash, fixture hashes, and report hash. It uses no broker,
+network, current clock, random source, or third-party package.
 
 ## Phase 1 configuration and decision contract
 

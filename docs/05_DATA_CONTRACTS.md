@@ -49,6 +49,19 @@ The core starter snapshot contains:
 The feature-builder phase must extend the stored evidence so every derived
 value can be reconstructed from raw ticks or bars.
 
+Phase 2 raw replay ticks contain logical symbol, UTC timestamp, bid, ask, and a
+non-negative source sequence. Raw bars contain UTC open/close timestamps,
+complete bid and ask OHLC values, and source sequence. JSON boundaries require
+decimal strings and reject JSON numeric prices, naive/non-UTC time, crossed
+quotes, inconsistent bars, duplicate identities, missing fields, and unknown
+fields. The replay clock orders by timestamp, record-type priority, symbol, and
+source sequence so input file order cannot change the result.
+
+Feature evidence stores the exact pre-event highest ask, lowest bid, median
+spread, mean true range from bid/ask bar midpoints, breakout/retest/hold times,
+classification, and every available cross-asset vote with its observation
+time. Missing related markets create no vote.
+
 ## Account snapshot
 
 - account mode (`DEMO`, `REAL`, or `UNKNOWN`);
@@ -71,6 +84,11 @@ account currencies, explicit profit-to-account conversion, minimum/maximum/
 step volume, commission per volume, and slippage allowance in ticks. Every
 decimal is a finite `Decimal`; missing, unknown, off-grid, or internally
 inconsistent metadata is rejected.
+
+`commission_per_volume` is the conservative total account-currency commission
+for opening and fully closing one volume unit. Broker adapters must normalize
+per-side schedules into that round-trip value; an unknown fee schedule fails
+closed rather than defaulting to zero.
 
 ## Decision record
 
@@ -120,10 +138,16 @@ See `config/events.example.csv`. The import must:
 
 ## Storage plan
 
-Phase 2 starts with:
+Phase 2 starts with strict checked-in JSON fixtures and one canonical JSON
+report so the deterministic baseline remains standard-library-only. Parquet is
+deferred until a licensed historical source and its schema are selected;
+SQLite WAL persistence enters with the Phase 3 journal. This temporary boundary
+is recorded in ADR-008 and does not couple the domain to JSON.
 
-- Parquet for normalized historical event/market inputs;
-- SQLite in WAL mode for local state, decisions, orders, and fills;
-- JSON export for one complete replay report.
+The complete report embeds raw fixture and expected outcome, derived evidence,
+pipeline decision, execution result when applicable, exit, gross P&L,
+commission, net P&L and net R, plus configuration, fixture, and report SHA-256
+hashes. An absent plan produces no execution attempt rather than a fabricated
+fill.
 
 The domain must not depend on these storage choices.

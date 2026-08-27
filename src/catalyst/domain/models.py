@@ -160,6 +160,8 @@ class AccountSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class BrokerContract:
+    """Broker economics; commission is total round-trip cost per volume."""
+
     symbol: str
     tick_size: Decimal
     tick_value: Decimal
