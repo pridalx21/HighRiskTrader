@@ -1,0 +1,37 @@
+[system]
+demo_only = true
+timezone = "UTC"
+auto_demo_armed = false
+log_level = "INFO"
+
+[strategy]
+strategy_id = "event_reaction_retest_v1"
+pre_arm_minutes = 30
+pre_event_range_minutes = 30
+shock_window_seconds = 90
+entry_deadline_minutes = 15
+minimum_related_markets = 2
+minimum_confirmations = 2
+maximum_spread_multiple = "2.5"
+maximum_data_age_seconds = "2.0"
+
+[risk]
+risk_fraction = "0.05"
+maximum_daily_loss_r = "3"
+maximum_consecutive_losses = 3
+maximum_active_risk_clusters = 1
+monthly_fresh_capital_chf = "1000.00"
+allow_averaging_down = false
+allow_overnight = false
+
+[execution]
+mode = "shadow"
+require_initial_stop = true
+blind_order_retry = false
+maximum_submit_attempts = 1
+
+[storage]
+journal_path = "data/catalyst.sqlite3"
+raw_data_dir = "data/raw"
+derived_data_dir = "data/derived"
+

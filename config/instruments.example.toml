@@ -1,0 +1,38 @@
+# Logical symbols are stable. Replace broker_symbol values only after checking
+# symbol_info on the selected MT5 demo server.
+
+[instruments.US100]
+broker_symbol = "CHANGE_ME"
+risk_cluster = "US_RISK"
+session_cutoff_utc = "20:45"
+
+[instruments.US500]
+broker_symbol = "CHANGE_ME"
+risk_cluster = "US_RISK"
+session_cutoff_utc = "20:45"
+
+[instruments.XAUUSD]
+broker_symbol = "CHANGE_ME"
+risk_cluster = "USD_MACRO"
+session_cutoff_utc = "20:45"
+
+[instruments.EURUSD]
+broker_symbol = "CHANGE_ME"
+risk_cluster = "USD_MACRO"
+session_cutoff_utc = "20:45"
+
+[instruments.USDJPY]
+broker_symbol = "CHANGE_ME"
+risk_cluster = "USD_MACRO"
+session_cutoff_utc = "20:45"
+
+[instruments.USDCHF]
+broker_symbol = "CHANGE_ME"
+risk_cluster = "CHF_MACRO"
+session_cutoff_utc = "20:45"
+
+[instruments.GER40]
+broker_symbol = "CHANGE_ME"
+risk_cluster = "EU_RISK"
+session_cutoff_utc = "20:45"
+
