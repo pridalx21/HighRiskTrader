@@ -3,4 +3,3 @@
 from catalyst.adapters.fake_broker import FakeDemoBroker
 
 __all__ = ["FakeDemoBroker"]
-

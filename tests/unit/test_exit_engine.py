@@ -55,9 +55,16 @@ class IntradayExitEngineTests(TestCase):
 
     def test_short_stop_exits_on_ask(self) -> None:
         position = ManagedPosition(
-            "PRIMARY", Direction.SHORT, Decimal("92.7"), Decimal("100"),
-            Decimal("100"), Decimal("0.6"), self.opened, Decimal("100"),
-            Decimal("95"), self.cutoff,
+            "PRIMARY",
+            Direction.SHORT,
+            Decimal("92.7"),
+            Decimal("100"),
+            Decimal("100"),
+            Decimal("0.6"),
+            self.opened,
+            Decimal("100"),
+            Decimal("95"),
+            self.cutoff,
         )
         quote = ExitQuote(
             "PRIMARY",

@@ -6,4 +6,4 @@ cd "$project_root"
 
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m catalyst.demo
-
+PYTHONPATH=src python -m catalyst.replay_demo

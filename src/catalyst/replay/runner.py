@@ -101,9 +101,7 @@ class ReplayRunner:
                     scenario.emergency_exit,
                 )
                 if exit_decision is None:
-                    raise RuntimeError(
-                        "filled replay position has no deterministic intraday exit"
-                    )
+                    raise RuntimeError("filled replay position has no deterministic intraday exit")
                 if exit_decision.exit_price is None:
                     raise RuntimeError("exit decision lacks executable price")
                 gross_pnl = self._gross_pnl(
@@ -167,13 +165,7 @@ class ReplayRunner:
             price_change = exit_price - position.entry
         else:
             price_change = position.entry - exit_price
-        return (
-            price_change
-            / tick_size
-            * tick_value
-            * conversion_rate
-            * position.quantity
-        )
+        return price_change / tick_size * tick_value * conversion_rate * position.quantity
 
     @staticmethod
     def _matches_expected(result: ReplayResult, fixture: ReplayFixture) -> bool:

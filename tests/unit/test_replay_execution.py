@@ -27,19 +27,13 @@ class ReplayClockTests(TestCase):
         )
 
         forward_keys = tuple(
-            (item.timestamp, item.kind, item.symbol, item.source_sequence)
-            for item in forward
+            (item.timestamp, item.kind, item.symbol, item.source_sequence) for item in forward
         )
         reverse_keys = tuple(
-            (item.timestamp, item.kind, item.symbol, item.source_sequence)
-            for item in reverse
+            (item.timestamp, item.kind, item.symbol, item.source_sequence) for item in reverse
         )
         self.assertEqual(forward_keys, reverse_keys)
-        same_time = [
-            item.kind
-            for item in forward
-            if item.timestamp == scenario.event.scheduled_at
-        ]
+        same_time = [item.kind for item in forward if item.timestamp == scenario.event.scheduled_at]
         self.assertEqual(same_time, [ClockItemKind.EVENT, ClockItemKind.BAR_CLOSE])
 
 

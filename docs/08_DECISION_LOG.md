@@ -134,6 +134,49 @@ Never rewrite an accepted entry; append a superseding decision.
   unvalidated optimization parameters. Enabling partial/trailing requires a
   versioned decision and new replay evidence.
 
+## ADR-012: Self-contained strict manual event CSV
+
+- **Status:** Accepted
+- **Context:** The normalized event contract requires status and eligible
+  logical symbols. Inferring either from event prose or currency would make the
+  same row environment-dependent and difficult to audit.
+- **Decision:** Require one exact CSV header with explicit UTC time,
+  `LOW|MEDIUM|HIGH` importance, explicit event status, pipe-delimited logical
+  symbols, `manual_csv` source, and optional finite decimal strings. Preserve
+  every ordered source field next to the normalized immutable event.
+- **Consequences:** Calendar edits fail loudly when their schema or identity is
+  ambiguous. A provider adapter may use a different raw contract later, but it
+  must produce the same normalized and source-preserving boundary.
+
+## ADR-013: Append-only SQLite WAL journal
+
+- **Status:** Accepted
+- **Context:** Phase 3 needs restart-safe audit and idempotency while keeping the
+  standard-library baseline and local MVP operations.
+- **Decision:** Use one local SQLite database with WAL, full synchronization,
+  foreign keys, checksummed forward migrations, immutable-table update/delete
+  triggers, an operating-system single-instance file lock, and a SHA-256 chain
+  over canonical entries. Store source/normalized events separately from the
+  append-only lifecycle stream.
+- **Consequences:** Journal corruption, schema mismatch, a second process, or an
+  unavailable write fails closed. SQLite is an adapter choice; the domain and
+  strategy remain persistence-independent. Parquet remains deferred.
+
+## ADR-014: Reserve before submit and never retry uncertainty
+
+- **Status:** Accepted
+- **Context:** A crash or timeout between broker acceptance and local
+  acknowledgement can make an order outcome unknowable. Automatic retry could
+  duplicate risk.
+- **Decision:** Require the event and full decision to be journaled, then insert
+  the unique stable idempotency key before the only broker submission attempt.
+  Treat reserved, submitting, timeout, not-found, and unknown states as
+  reconciliation-required. Reconciliation is read-only and never arms or
+  resubmits; only a positively found broker order can close the uncertainty.
+- **Consequences:** Some valid opportunities may require manual review or be
+  missed after an incident. This conservative loss of availability is accepted
+  to prevent duplicate event exposure.
+
 ## Template
 
 ```text

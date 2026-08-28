@@ -67,4 +67,3 @@ class CanonicalSerializationTests(TestCase):
         )
         self.assertIsNone(decision.plan)
         self.assertEqual(decision.configuration_hash, RuntimeConfig().configuration_hash)
-

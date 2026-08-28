@@ -129,20 +129,35 @@ Never log a password or authentication token.
 
 See `config/events.example.csv`. The import must:
 
+- require the exact ordered header `event_id,name,scheduled_at,currency,importance,status,eligible_symbols,source,actual,consensus,previous`;
 - reject naive timestamps;
+- reject timestamps that are not already UTC;
 - reject duplicate `event_id` values;
-- reject unknown importance values;
+- reject unknown importance or status values;
 - reject empty event names or currency codes;
-- preserve source rows for audit;
+- require explicit pipe-delimited logical symbols rather than infer them;
+- require `manual_csv` as the Phase 3 source identity;
+- preserve every ordered source field for audit;
+- validate present optional numeric values as finite decimal strings;
 - never infer actual/consensus values from prose.
 
 ## Storage plan
 
-Phase 2 starts with strict checked-in JSON fixtures and one canonical JSON
-report so the deterministic baseline remains standard-library-only. Parquet is
-deferred until a licensed historical source and its schema are selected;
-SQLite WAL persistence enters with the Phase 3 journal. This temporary boundary
-is recorded in ADR-008 and does not couple the domain to JSON.
+Phase 2 replay retains strict checked-in JSON fixtures and one canonical JSON
+report. Parquet remains deferred until a licensed historical source and schema
+are selected. Phase 3 adds standard-library SQLite WAL persistence with
+checksummed migrations, immutable business-table triggers, foreign keys, full
+synchronization, an operating-system single-instance lock, and a global
+SHA-256 journal-entry chain.
+
+The journal stores source and normalized event records, complete decisions and
+gate reasons, configuration and software versions, order intents and results,
+fills, state transitions, heartbeats, and reconciliation outcomes. It reserves
+the stable decision/idempotency key before broker submission. Repeated
+identical event imports are no-ops; changed content under an existing identity
+is a conflict. Event audit export is canonical JSON containing source fields,
+normalized event, all event entries, order plans, storage version, and a bundle
+hash.
 
 The complete report embeds raw fixture and expected outcome, derived evidence,
 pipeline decision, execution result when applicable, exit, gross P&L,

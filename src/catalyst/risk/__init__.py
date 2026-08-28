@@ -4,4 +4,3 @@ from catalyst.risk.manager import RiskManager
 from catalyst.risk.policy import RiskPolicy
 
 __all__ = ["RiskManager", "RiskPolicy"]
-

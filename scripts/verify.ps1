@@ -6,4 +6,4 @@ $env:PYTHONPATH = "src"
 
 python -m unittest discover -s tests -v
 python -m catalyst.demo
-
+python -m catalyst.replay_demo

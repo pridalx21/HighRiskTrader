@@ -37,9 +37,7 @@ class RiskManagerTests(TestCase):
         self.assertEqual(decision.code, "BROKER_DISCONNECTED")
 
     def test_rejects_stale_account_snapshot(self) -> None:
-        decision = self.assess(
-            replace(demo_account(), timestamp=READY_TIME - timedelta(seconds=3))
-        )
+        decision = self.assess(replace(demo_account(), timestamp=READY_TIME - timedelta(seconds=3)))
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.code, "ACCOUNT_SNAPSHOT_STALE")
 
@@ -51,16 +49,12 @@ class RiskManagerTests(TestCase):
         self.assertEqual(decision.code, "ACCOUNT_SNAPSHOT_STALE")
 
     def test_daily_loss_limit_locks_at_three_day_start_r(self) -> None:
-        decision = self.assess(
-            replace(demo_account(), daily_realized_pnl=Decimal("-150.00"))
-        )
+        decision = self.assess(replace(demo_account(), daily_realized_pnl=Decimal("-150.00")))
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.code, "DAILY_LOSS_LOCK")
 
     def test_open_worst_case_risk_counts_toward_daily_lock(self) -> None:
-        decision = self.assess(
-            replace(demo_account(), open_worst_case_risk=Decimal("150.00"))
-        )
+        decision = self.assess(replace(demo_account(), open_worst_case_risk=Decimal("150.00")))
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.code, "DAILY_LOSS_LOCK")
 

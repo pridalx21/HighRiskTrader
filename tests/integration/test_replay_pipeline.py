@@ -17,10 +17,7 @@ DATA = ROOT / "tests" / "data" / "replay"
 class ReplayPipelineIntegrationTests(TestCase):
     def run_all(self):
         runner = ReplayRunner()
-        return tuple(
-            runner.run(load_replay_fixture(path))
-            for path in sorted(DATA.glob("*.json"))
-        )
+        return tuple(runner.run(load_replay_fixture(path)) for path in sorted(DATA.glob("*.json")))
 
     def test_all_seven_synthetic_outcomes_match_exactly(self) -> None:
         results = self.run_all()
@@ -37,9 +34,7 @@ class ReplayPipelineIntegrationTests(TestCase):
         results = self.run_all()
 
         failures = [
-            result
-            for result in results
-            if result.scenario_id not in {"long_pass", "short_pass"}
+            result for result in results if result.scenario_id not in {"long_pass", "short_pass"}
         ]
         self.assertTrue(all(result.decision.plan is None for result in failures))
         self.assertTrue(all(result.execution is None for result in failures))
