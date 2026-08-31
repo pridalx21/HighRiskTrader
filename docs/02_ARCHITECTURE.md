@@ -114,6 +114,12 @@ event_id + logical_symbol + strategy_version + direction + setup_sequence
 The journal must reject a duplicate submitted key. A timeout is not permission
 to resubmit until broker state and history have been reconciled.
 
+Phase 3 implements this boundary with a unique immutable `order_intents` row
+inserted only after the event and complete decision are durable. Lifecycle
+changes are appended rather than updated. Reserved, submitting, and uncertain
+states survive restart and can only be inspected through the broker-neutral
+reconciliation port; they are never interpreted as permission to resubmit.
+
 ## Why MT5 is an adapter
 
 Python is better suited to structured event data, replay, analysis, and a small

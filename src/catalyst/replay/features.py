@@ -65,12 +65,8 @@ class MarketFeatureBuilder:
             pre_event_low,
             scenario.contract.tick_size,
         )
-        delay_microseconds = int(
-            scenario.evaluation_delay_seconds * Decimal("1000000")
-        )
-        evaluation_at = evaluation_tick.timestamp + timedelta(
-            microseconds=delay_microseconds
-        )
+        delay_microseconds = int(scenario.evaluation_delay_seconds * Decimal("1000000"))
+        evaluation_at = evaluation_tick.timestamp + timedelta(microseconds=delay_microseconds)
         data_age = scenario.evaluation_delay_seconds
         votes = self._votes(
             scenario.ticks,
@@ -79,9 +75,7 @@ class MarketFeatureBuilder:
             evaluation_at,
         )
         confirmations = (
-            sum(vote.direction is direction for vote in votes)
-            if direction is not None
-            else 0
+            sum(vote.direction is direction for vote in votes) if direction is not None else 0
         )
         stop_candidate = pre_event_low if direction is not Direction.SHORT else pre_event_high
         evidence = FeatureEvidence(

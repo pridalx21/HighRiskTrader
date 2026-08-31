@@ -6,4 +6,3 @@ from catalyst.strategy.event_reaction_retest import (
 )
 
 __all__ = ["EventReactionRetestConfig", "EventReactionRetestStrategy"]
-

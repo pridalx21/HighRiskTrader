@@ -135,8 +135,29 @@ The starter includes:
 The current implementation also includes a strict UTC/Decimal JSON fixture
 boundary, bid/ask feature reconstruction, stable replay clock, execution and
 intraday exit models, seven synthetic scenarios, and a canonical JSON report.
-The real calendar feed, journal, MT5 order adapter, and dashboard remain for
-the ordered Codex phases.
+It now also includes strict manual-CSV event ingestion, an append-only SQLite
+WAL journal, durable order-intent idempotency, single-instance locking,
+broker-neutral restart reconciliation, and canonical event audit bundles. The
+MT5 order adapter, dashboard, and validation harness remain for the ordered
+Codex phases.
+
+## Phase 3 event data and durable journal
+
+`catalyst.adapters.csv_event_feed.CsvEventFeed` parses the exact checked-in CSV
+schema. It requires explicit UTC time, status, eligible logical symbols, and
+source identity; preserves every ordered source field; and rejects duplicate
+IDs, unknown enum values, malformed optional decimals, and implicit symbol
+inference.
+
+`catalyst.adapters.sqlite_journal.SQLiteJournal` uses checksummed migrations,
+WAL, full synchronization, foreign keys, immutable-table triggers, a global
+SHA-256 entry chain, and an operating-system file lock. Events and complete
+decisions must be durable before an order key can be reserved. The durable demo
+executor submits each key at most once. A timeout, crash, unknown broker state,
+or failed reconciliation never causes automatic resubmission or automatic
+arming. It also positively rechecks demo mode and connectivity immediately
+before the order call. `export_event_audit_bundle` returns one canonical,
+hashed record from source row through decision and outcome.
 
 ## Phase 2 deterministic replay
 
@@ -163,7 +184,7 @@ limits/step, commission, and slippage allowance. No executable
 `value_per_price_unit = 1` fallback remains. Accepted and rejected decisions
 carry stable reason codes and the same deterministic SHA-256 configuration
 hash. `catalyst.domain.serialization.canonical_json` produces stable JSON for
-replay comparison and journaling in later phases.
+replay comparison and journal persistence.
 
 ## Important warning
 

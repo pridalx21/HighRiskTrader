@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from json import JSONDecodeError, load
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from catalyst.domain.enums import AccountMode, Direction, EventImportance, EventStatus
 from catalyst.domain.models import AccountSnapshot, BrokerContract, EconomicEvent
@@ -338,9 +339,7 @@ def parse_replay_fixture(data: Mapping[str, Any]) -> ReplayFixture:
     raw_execution = _optional_string(expected_data, "execution_status", "expected")
     try:
         direction = Direction(raw_direction) if raw_direction is not None else None
-        execution_status = (
-            ExecutionStatus(raw_execution) if raw_execution is not None else None
-        )
+        execution_status = ExecutionStatus(raw_execution) if raw_execution is not None else None
     except ValueError as exc:
         raise ValueError("expected has an unknown direction or execution status") from exc
     expected = ExpectedOutcome(

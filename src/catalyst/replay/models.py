@@ -223,13 +223,8 @@ class ReplayScenario:
             raise ValueError("primary symbol must be eligible for the event")
         if self.contract.symbol != self.primary_symbol:
             raise ValueError("contract symbol must match primary symbol")
-        if (
-            self.execution.maximum_adverse_slippage_ticks
-            > self.contract.slippage_ticks
-        ):
-            raise ValueError(
-                "execution slippage limit must not exceed sized contract allowance"
-            )
+        if self.execution.maximum_adverse_slippage_ticks > self.contract.slippage_ticks:
+            raise ValueError("execution slippage limit must not exceed sized contract allowance")
         if not self.ticks or not any(tick.symbol == self.primary_symbol for tick in self.ticks):
             raise ValueError("scenario requires primary-symbol ticks")
         if not self.bars or not any(bar.symbol == self.primary_symbol for bar in self.bars):

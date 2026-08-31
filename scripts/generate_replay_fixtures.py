@@ -127,15 +127,14 @@ def fixtures() -> dict[str, dict]:
     cases = {
         "long_pass": {
             "scenario": long_pass,
-            "expected": expected(
-                "TRADE_PLAN_READY", "long", "filled", "session_cutoff"
-            ),
+            "expected": expected("TRADE_PLAN_READY", "long", "filled", "session_cutoff"),
         }
     }
 
     short_pass = deepcopy(long_pass)
     short_pass["scenario_id"] = "short_pass"
-    short_pass["ticks"] = short_pass["ticks"][:5] + [
+    short_pass["ticks"] = [
+        *short_pass["ticks"][:5],
         tick("PRIMARY", "2030-01-10T13:31:30Z", "94.6", "94.8", 4),
         tick("PRIMARY", "2030-01-10T13:32:00Z", "94.8", "95.0", 5),
         tick("R1", "2030-01-10T13:32:09Z", "48.9", "49.1", 2),
@@ -147,15 +146,14 @@ def fixtures() -> dict[str, dict]:
     ]
     cases["short_pass"] = {
         "scenario": short_pass,
-        "expected": expected(
-            "TRADE_PLAN_READY", "short", "filled", "session_cutoff"
-        ),
+        "expected": expected("TRADE_PLAN_READY", "short", "filled", "session_cutoff"),
     }
 
     whipsaw = deepcopy(long_pass)
     whipsaw["scenario_id"] = "whipsaw"
     whipsaw["account"]["timestamp"] = "2030-01-10T13:31:40Z"
-    whipsaw["ticks"] = whipsaw["ticks"][:5] + [
+    whipsaw["ticks"] = [
+        *whipsaw["ticks"][:5],
         tick("PRIMARY", "2030-01-10T13:31:30Z", "100.2", "100.4", 4),
         tick("R1", "2030-01-10T13:31:39Z", "50.9", "51.1", 2),
         tick("R2", "2030-01-10T13:31:39Z", "70.9", "71.1", 2),
@@ -199,7 +197,8 @@ def fixtures() -> dict[str, dict]:
     late["scenario_id"] = "late_setup"
     late["session_cutoff"] = "2030-01-10T14:00:00Z"
     late["account"]["timestamp"] = "2030-01-10T13:46:20Z"
-    late["ticks"] = late["ticks"][:5] + [
+    late["ticks"] = [
+        *late["ticks"][:5],
         tick("PRIMARY", "2030-01-10T13:46:00Z", "100.2", "100.4", 4),
         tick("PRIMARY", "2030-01-10T13:46:10Z", "100.0", "100.2", 5),
         tick("R1", "2030-01-10T13:46:19Z", "50.9", "51.1", 2),

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from tomllib import TOMLDecodeError, load
-from typing import Any, Mapping
+from typing import Any
 
 from catalyst.domain.serialization import sha256_canonical
 from catalyst.engine.state_machine import StateMachineConfig
@@ -33,7 +34,7 @@ class SystemConfig:
 
 @dataclass(frozen=True, slots=True)
 class RiskConfig:
-    policy: RiskPolicy = RiskPolicy()
+    policy: RiskPolicy = field(default_factory=RiskPolicy)
     monthly_fresh_capital_chf: Decimal = Decimal("1000.00")
     allow_averaging_down: bool = False
     allow_overnight: bool = False
@@ -41,10 +42,7 @@ class RiskConfig:
     def __post_init__(self) -> None:
         if not isinstance(self.monthly_fresh_capital_chf, Decimal):
             raise ValueError("monthly_fresh_capital_chf must be Decimal")
-        if (
-            not self.monthly_fresh_capital_chf.is_finite()
-            or self.monthly_fresh_capital_chf <= 0
-        ):
+        if not self.monthly_fresh_capital_chf.is_finite() or self.monthly_fresh_capital_chf <= 0:
             raise ValueError("monthly_fresh_capital_chf must be finite and positive")
         if self.allow_averaging_down:
             raise ValueError("allow_averaging_down must be false")
@@ -86,20 +84,18 @@ class StorageConfig:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeConfig:
-    system: SystemConfig = SystemConfig()
-    strategy: EventReactionRetestConfig = EventReactionRetestConfig()
-    state_machine: StateMachineConfig = StateMachineConfig()
+    system: SystemConfig = field(default_factory=SystemConfig)
+    strategy: EventReactionRetestConfig = field(default_factory=EventReactionRetestConfig)
+    state_machine: StateMachineConfig = field(default_factory=StateMachineConfig)
     pre_event_range: timedelta = timedelta(minutes=30)
-    risk: RiskConfig = RiskConfig()
-    execution: ExecutionConfig = ExecutionConfig()
-    storage: StorageConfig = StorageConfig()
+    risk: RiskConfig = field(default_factory=RiskConfig)
+    execution: ExecutionConfig = field(default_factory=ExecutionConfig)
+    storage: StorageConfig = field(default_factory=StorageConfig)
 
     def __post_init__(self) -> None:
         if self.pre_event_range <= timedelta(0):
             raise ValueError("pre_event_range must be positive")
-        if self.state_machine.shock_window != timedelta(
-            seconds=self.strategy.shock_window_seconds
-        ):
+        if self.state_machine.shock_window != timedelta(seconds=self.strategy.shock_window_seconds):
             raise ValueError("strategy and state-machine shock windows must match")
         if self.state_machine.entry_deadline != timedelta(
             seconds=self.strategy.entry_deadline_seconds
@@ -218,12 +214,8 @@ def parse_runtime_config(data: Mapping[str, Any]) -> RuntimeConfig:
         auto_demo_armed=_require_type(system_data, "auto_demo_armed", bool, "system"),
         log_level=_require_type(system_data, "log_level", str, "system"),
     )
-    shock_window_seconds = _require_type(
-        strategy_data, "shock_window_seconds", int, "strategy"
-    )
-    entry_deadline_minutes = _require_type(
-        strategy_data, "entry_deadline_minutes", int, "strategy"
-    )
+    shock_window_seconds = _require_type(strategy_data, "shock_window_seconds", int, "strategy")
+    entry_deadline_minutes = _require_type(strategy_data, "entry_deadline_minutes", int, "strategy")
     strategy = EventReactionRetestConfig(
         strategy_id=_require_type(strategy_data, "strategy_id", str, "strategy"),
         shock_window_seconds=shock_window_seconds,
@@ -242,18 +234,14 @@ def parse_runtime_config(data: Mapping[str, Any]) -> RuntimeConfig:
         ),
     )
     state_machine = StateMachineConfig(
-        pre_arm=timedelta(
-            minutes=_require_type(strategy_data, "pre_arm_minutes", int, "strategy")
-        ),
+        pre_arm=timedelta(minutes=_require_type(strategy_data, "pre_arm_minutes", int, "strategy")),
         shock_window=timedelta(seconds=shock_window_seconds),
         entry_deadline=timedelta(minutes=entry_deadline_minutes),
     )
     risk = RiskConfig(
         policy=RiskPolicy(
             risk_fraction=_decimal_string(risk_data, "risk_fraction", "risk"),
-            maximum_daily_loss_r=_decimal_string(
-                risk_data, "maximum_daily_loss_r", "risk"
-            ),
+            maximum_daily_loss_r=_decimal_string(risk_data, "maximum_daily_loss_r", "risk"),
             maximum_consecutive_losses=_require_type(
                 risk_data, "maximum_consecutive_losses", int, "risk"
             ),
@@ -261,12 +249,8 @@ def parse_runtime_config(data: Mapping[str, Any]) -> RuntimeConfig:
                 risk_data, "maximum_active_risk_clusters", int, "risk"
             ),
         ),
-        monthly_fresh_capital_chf=_decimal_string(
-            risk_data, "monthly_fresh_capital_chf", "risk"
-        ),
-        allow_averaging_down=_require_type(
-            risk_data, "allow_averaging_down", bool, "risk"
-        ),
+        monthly_fresh_capital_chf=_decimal_string(risk_data, "monthly_fresh_capital_chf", "risk"),
+        allow_averaging_down=_require_type(risk_data, "allow_averaging_down", bool, "risk"),
         allow_overnight=_require_type(risk_data, "allow_overnight", bool, "risk"),
     )
     execution = ExecutionConfig(
@@ -274,9 +258,7 @@ def parse_runtime_config(data: Mapping[str, Any]) -> RuntimeConfig:
         require_initial_stop=_require_type(
             execution_data, "require_initial_stop", bool, "execution"
         ),
-        blind_order_retry=_require_type(
-            execution_data, "blind_order_retry", bool, "execution"
-        ),
+        blind_order_retry=_require_type(execution_data, "blind_order_retry", bool, "execution"),
         maximum_submit_attempts=_require_type(
             execution_data, "maximum_submit_attempts", int, "execution"
         ),

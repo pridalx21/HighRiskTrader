@@ -57,6 +57,16 @@ executable bid/ask sides, hard stops, range reclaim, emergency precedence,
 cutoff, stale exit quotes, and the stop-widening prohibition. Repeated complete
 reports must be byte-identical.
 
+### Persistence and restart tests
+
+The Phase 3 suite uses temporary local databases and synthetic adapters to
+verify strict CSV failures, idempotent re-import, WAL migrations,
+single-instance locking, immutable-table triggers, hash-chain integrity,
+credential-field rejection, migration mismatch, corruption, durable
+reserve-before-submit behavior, simulated crash/restart, timeout uncertainty,
+read-only reconciliation, and canonical audit export. Unknown and not-found
+broker outcomes must remain disarmed and must never call order submission.
+
 ### Demo forward tests
 
 - Demo balance set to approximately CHF 1,000.

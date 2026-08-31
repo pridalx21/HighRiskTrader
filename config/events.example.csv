@@ -1,5 +1,4 @@
-event_id,name,scheduled_at,currency,importance,source,actual,consensus,previous
-SYNTH_US_CPI_001,Synthetic US CPI,2030-01-10T13:30:00+00:00,USD,HIGH,manual_csv,,,
-SYNTH_ECB_001,Synthetic ECB Decision,2030-01-24T13:15:00+00:00,EUR,HIGH,manual_csv,,,
-SYNTH_SNB_001,Synthetic SNB Decision,2030-03-21T08:30:00+00:00,CHF,HIGH,manual_csv,,,
-
+event_id,name,scheduled_at,currency,importance,status,eligible_symbols,source,actual,consensus,previous
+SYNTH_US_CPI_001,Synthetic US CPI,2030-01-10T13:30:00+00:00,USD,HIGH,SCHEDULED,US100|US500|XAUUSD|EURUSD|USDJPY|USDCHF,manual_csv,,,
+SYNTH_ECB_001,Synthetic ECB Decision,2030-01-24T13:15:00+00:00,EUR,HIGH,SCHEDULED,EURUSD|GER40,manual_csv,,,
+SYNTH_SNB_001,Synthetic SNB Decision,2030-03-21T08:30:00+00:00,CHF,HIGH,SCHEDULED,USDCHF,manual_csv,,,

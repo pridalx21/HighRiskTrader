@@ -6,7 +6,6 @@ from decimal import Decimal
 from catalyst.domain.enums import AccountMode, EventImportance, EventStatus
 from catalyst.domain.models import AccountSnapshot, BrokerContract, EconomicEvent, MarketSnapshot
 
-
 EVENT_TIME = datetime(2030, 1, 10, 13, 30, tzinfo=UTC)
 READY_TIME = EVENT_TIME + timedelta(minutes=3)
 

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 2: deterministic event replay and market features complete.
+Phase 3: strict event data and durable append-only journal complete.
 
 ## Completed
 
@@ -47,11 +47,34 @@ Phase 2: deterministic event replay and market features complete.
   execution, exits, costs, P&L/R, and SHA-256 hashes.
 - ADR-008 through ADR-011 record the Phase 2 storage, feature, execution, and
   exit decisions.
+- Phase 3 implementation plan added in `docs/PHASE_3_PLAN.md`.
+- Exact manual CSV schema now requires UTC, explicit importance/status,
+  pipe-delimited logical symbols, finite optional decimal strings, and source
+  identity while preserving all ordered source fields.
+- SQLite WAL journal now applies checksummed migrations, foreign keys, full
+  synchronization, immutable-table triggers, a global SHA-256 entry chain, and
+  an operating-system single-instance lock.
+- Events and complete decisions must be durable before a unique order intent
+  can be reserved; repeated identical imports and entries are idempotent.
+- Durable demo execution submits a reserved key at most once. Timeouts and
+  exceptions become explicit uncertain states without automatic retry.
+- The durable executor positively rechecks demo mode and broker connectivity
+  immediately before submission; real, unknown, disconnected, or unreadable
+  account state is terminal and never reaches the order call.
+- Broker-neutral restart reconciliation resolves positively found orders and
+  leaves not-found, unknown, and adapter-error outcomes disarmed.
+- Canonical audit export reconstructs an event from ordered source fields
+  through decision, order lifecycle, fills, and outcome with a bundle hash.
+- Migration mismatch, corruption, secret-bearing fields, second instances,
+  invalid lifecycle transitions, and crash/restart paths have failure tests.
+- ADR-012 through ADR-014 record the CSV, SQLite, and reserve-before-submit
+  decisions.
+- Existing CI formatting/type issues were repaired; Ruff, Ruff format, mypy,
+  pytest, and the 85% coverage gate now pass.
 
 ## Not implemented
 
-- CSV/provider event adapter.
-- Persistent journal and restart reconciliation.
+- Structured/provider calendar adapter beyond the manual CSV boundary.
 - MT5 market-data and order adapter.
 - Dashboard and kill switch.
 - Strategy validation harness.
@@ -70,11 +93,8 @@ Two starter defects were repaired with regression coverage:
 Phase 1 also resolved the previously planned UTC, reason-code, broker-metadata,
 rounding, configuration, and deterministic-serialization gaps.
 
-The remaining differences are planned work, not enabled behavior:
-
-- Phase 3: persistent idempotency, journal, CSV calendar, and restart
-  reconciliation.
-- Phases 4-6: MT5 demo adapter, kill switch/dashboard, and validation harness.
+The remaining differences are planned work, not enabled behavior: Phases 4-6
+cover the MT5 demo adapter, kill switch/dashboard, and validation harness.
 
 No executable live-account path, network call, wall-clock call, float-based
 money arithmetic, credential, or order path without an initial protective stop
@@ -100,25 +120,28 @@ None of these permits weakening the demo-only or fail-closed rules.
 
 ## Next task
 
-Start `prompts/03_event_data_and_journal.md`: implement strict event ingestion,
-the persistent append-only journal, durable idempotency, and restart
-reconciliation without adding MT5 or a live path.
+Start `prompts/04_mt5_demo.md`: implement the Windows MT5 market-data and order
+adapter in shadow mode first, with explicit demo-account verification and the
+Phase 3 reconciliation boundary. Broker and logical-symbol mapping must be
+selected explicitly; no live path may be added.
 
 ## Last verification
 
 ```text
-Date: 2026-08-27
-Environment: Microsoft Windows NT 10.0.26200.0 AMD64; PowerShell 5.1.26100.9168
-Python: 3.14.4
+Date: 2026-08-28
+Environment: Linux 6.18.35 x86_64
+Python: 3.12.13
 Commands:
-  powershell -ExecutionPolicy Bypass -File scripts/verify.ps1
-  $env:PYTHONPATH = "src"; python -m catalyst.replay_demo
-  $env:PYTHONPATH = "src"; python -m compileall -q src tests scripts
+  bash scripts/verify.sh
+  ruff check .
+  ruff format --check .
+  mypy src
+  pytest --cov=src/catalyst --cov-report=term-missing --cov-fail-under=85
+  PYTHONPATH=src python -m compileall -q src tests scripts
   Repeated canonical replay byte/hash comparison
-  Repository scans for live/order/network/clock/float bypasses, secrets,
-  generated artifacts, trailing whitespace, and Python lines over 100 columns
 Result:
-  Complete suite: 131 tests passed.
+  Complete suite: 183 tests passed; total branch coverage 85.88%.
+  Ruff lint/format and strict mypy checks passed.
   Demo: state=ready with an accepted fake-broker bracket and mandatory stop.
   Replay: all 7 exact expected outcomes matched.
   Configuration hash:
@@ -126,6 +149,4 @@ Result:
   Canonical report hash:
     291994ff87ee609a2793e2050ac2b5001cfae675b59debecfdbdf562a5006d6e
   Canonical report length: 35,343 UTF-8 bytes.
-Optional tools:
-  ruff, mypy, and pytest were not installed; no optional check was claimed.
 ```

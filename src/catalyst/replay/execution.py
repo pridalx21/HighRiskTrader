@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from decimal import Decimal, ROUND_FLOOR
+from decimal import ROUND_FLOOR, Decimal
 
 from catalyst.domain.enums import Direction
 from catalyst.domain.models import BrokerContract, TradePlan
@@ -31,14 +31,10 @@ class ReplayExecutionModel:
         if plan.symbol != contract.symbol:
             raise ValueError("plan and contract symbols must match")
         if scenario.maximum_adverse_slippage_ticks > contract.slippage_ticks:
-            raise ValueError(
-                "execution slippage limit exceeds the risk-sized contract allowance"
-            )
+            raise ValueError("execution slippage limit exceeds the risk-sized contract allowance")
         if plan.quantity % contract.volume_step != ZERO:
             raise ValueError("requested quantity must align to volume step")
-        eligible_at = plan.created_at + timedelta(
-            milliseconds=scenario.latency_milliseconds
-        )
+        eligible_at = plan.created_at + timedelta(milliseconds=scenario.latency_milliseconds)
         quote = next(
             (
                 tick
@@ -76,9 +72,7 @@ class ReplayExecutionModel:
             )
 
         raw_quantity = plan.quantity * scenario.fill_fraction
-        step_count = (raw_quantity / contract.volume_step).to_integral_value(
-            rounding=ROUND_FLOOR
-        )
+        step_count = (raw_quantity / contract.volume_step).to_integral_value(rounding=ROUND_FLOOR)
         filled_quantity = step_count * contract.volume_step
         if filled_quantity < contract.volume_minimum:
             return self._unfilled(
@@ -90,9 +84,7 @@ class ReplayExecutionModel:
                 adverse=adverse,
             )
         status = (
-            ExecutionStatus.FILLED
-            if filled_quantity == plan.quantity
-            else ExecutionStatus.PARTIAL
+            ExecutionStatus.FILLED if filled_quantity == plan.quantity else ExecutionStatus.PARTIAL
         )
         return ExecutionResult(
             status=status,

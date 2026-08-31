@@ -54,9 +54,10 @@ class EventReactionRetestStrategy:
         market: MarketSnapshot,
         now: datetime,
     ) -> SetupEvaluation:
-        if now.tzinfo is None or now.utcoffset() is None:
+        utc_offset = now.utcoffset()
+        if now.tzinfo is None or utc_offset is None:
             raise ValueError("now must be timezone-aware UTC")
-        if now.utcoffset().total_seconds() != 0:
+        if utc_offset.total_seconds() != 0:
             raise ValueError("now must be normalized to UTC")
 
         seconds_since_event = (now - event.scheduled_at).total_seconds()

@@ -8,7 +8,6 @@ from unittest import TestCase
 
 from catalyst.config import RuntimeConfig, load_runtime_config, parse_runtime_config
 
-
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "settings.example.toml"
 
 

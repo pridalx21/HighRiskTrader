@@ -82,10 +82,19 @@ Minimum health indicators:
 - auto-demo armed/disarmed;
 - active positions, pending orders, and risk locks.
 
+## Local journal boundary
+
+Phase 3 permits exactly one process to open the journal through an operating-
+system file lock. SQLite must report WAL mode, pass schema and integrity checks,
+and verify its canonical entry hash chain before the journal becomes healthy.
+Business records have update/delete rejection triggers. Journal APIs reject
+credential-shaped key names recursively. Failure of any of these checks keeps
+execution disarmed; deleting a lock file is never a recovery procedure while a
+process may still be running.
+
 ## Post-MVP integrations
 
 - n8n: daily schedule import, backup, and report delivery only.
 - OpenClaw: read-only journal explanations; no broker credentials or order tool.
 - MQL5 guardian: independent heartbeat, maximum-volume, required-stop, and
   emergency-close checks after Python demo stability.
-

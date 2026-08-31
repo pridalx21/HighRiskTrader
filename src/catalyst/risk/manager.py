@@ -24,10 +24,7 @@ class RiskManager:
             raise ValueError("now must be normalized to UTC")
         if not isinstance(maximum_snapshot_age_seconds, Decimal):
             raise ValueError("maximum_snapshot_age_seconds must be Decimal")
-        if (
-            not maximum_snapshot_age_seconds.is_finite()
-            or maximum_snapshot_age_seconds < 0
-        ):
+        if not maximum_snapshot_age_seconds.is_finite() or maximum_snapshot_age_seconds < 0:
             raise ValueError("maximum_snapshot_age_seconds must be finite and non-negative")
         if not account.connected:
             return RiskDecision(
@@ -109,9 +106,7 @@ class RiskManager:
             raise ValueError("entry and stop must align to tick_size")
 
         stop_ticks = stop_distance / contract.tick_size
-        base_loss_per_volume = (
-            stop_ticks * contract.tick_value * contract.profit_to_account_rate
-        )
+        base_loss_per_volume = stop_ticks * contract.tick_value * contract.profit_to_account_rate
         if not base_loss_per_volume.is_finite() or base_loss_per_volume <= 0:
             raise ValueError("base loss per volume is invalid")
 
@@ -121,9 +116,7 @@ class RiskManager:
         if raw_quantity > contract.volume_maximum:
             raise ValueError("calculated raw quantity exceeds volume_maximum")
 
-        step_count = (raw_quantity / contract.volume_step).to_integral_value(
-            rounding=ROUND_FLOOR
-        )
+        step_count = (raw_quantity / contract.volume_step).to_integral_value(rounding=ROUND_FLOOR)
         quantity = step_count * contract.volume_step
         if quantity < contract.volume_minimum:
             raise ValueError("rounded quantity is below volume_minimum")
@@ -131,14 +124,10 @@ class RiskManager:
             raise ValueError("rounded quantity exceeds volume_maximum")
 
         slippage_loss_per_volume = (
-            contract.slippage_ticks
-            * contract.tick_value
-            * contract.profit_to_account_rate
+            contract.slippage_ticks * contract.tick_value * contract.profit_to_account_rate
         )
         worst_case_loss_per_volume = (
-            base_loss_per_volume
-            + slippage_loss_per_volume
-            + contract.commission_per_volume
+            base_loss_per_volume + slippage_loss_per_volume + contract.commission_per_volume
         )
         maximum_loss = quantity * worst_case_loss_per_volume
         if not maximum_loss.is_finite() or maximum_loss <= 0:

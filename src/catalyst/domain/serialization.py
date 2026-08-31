@@ -34,8 +34,7 @@ def to_canonical_value(value: Any) -> Any:
         return str(seconds)
     if is_dataclass(value) and not isinstance(value, type):
         return {
-            field.name: to_canonical_value(getattr(value, field.name))
-            for field in fields(value)
+            field.name: to_canonical_value(getattr(value, field.name)) for field in fields(value)
         }
     if isinstance(value, dict):
         if any(not isinstance(key, str) for key in value):
