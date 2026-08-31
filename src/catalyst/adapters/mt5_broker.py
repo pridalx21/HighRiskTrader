@@ -379,7 +379,7 @@ class MT5DemoBroker:
         if match is not None:
             return BrokerOrderLookup(
                 BrokerOrderState.FOUND_OPEN,
-                str(getattr(match, "ticket")),
+                str(match.ticket),
                 "matching MT5 open order found by deterministic client comment",
             )
 
@@ -392,7 +392,7 @@ class MT5DemoBroker:
         if match is not None:
             return BrokerOrderLookup(
                 BrokerOrderState.FOUND_FILLED,
-                str(getattr(match, "ticket")),
+                str(match.ticket),
                 "matching MT5 historical order found by deterministic client comment",
             )
         if open_orders is None or history is None:
