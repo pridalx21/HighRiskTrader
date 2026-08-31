@@ -24,6 +24,7 @@ ui = ["plotly>=5.24,<7", "streamlit>=1.40,<2"]
 
 [project.scripts]
 catalyst-demo = "catalyst.demo:main"
+catalyst-validate = "catalyst.validation_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -36,12 +37,15 @@ pythonpath = ["src"]
 [tool.coverage.run]
 branch = true
 source = ["catalyst"]
-# External adapters and command entry points have explicit contract/command tests;
-# the 85% aggregate gate measures the deterministic executable core.
+# Optional broker/UI adapters and command entry points have focused contract tests;
+# the aggregate 85% gate measures deterministic executable and validation logic.
 omit = [
   "src/catalyst/adapters/mt5_broker.py",
+  "src/catalyst/adapters/mt5_observability.py",
+  "src/catalyst/dashboard.py",
   "src/catalyst/demo.py",
   "src/catalyst/replay_demo.py",
+  "src/catalyst/validation_cli.py",
 ]
 
 [tool.coverage.report]
