@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
-import unittest
 
 from catalyst.adapters.mt5_broker import (
     MT5AccountRiskState,
@@ -16,7 +16,6 @@ from catalyst.domain.enums import Direction
 from catalyst.domain.models import TradePlan
 from catalyst.ports.journal import OrderIntentRecord, OrderIntentState
 from catalyst.ports.reconciliation import BrokerOrderState
-
 
 NOW = datetime(2030, 1, 10, 13, 32, tzinfo=UTC)
 
@@ -194,7 +193,6 @@ class MT5DemoBrokerTests(unittest.TestCase):
 
     def test_armed_demo_submit_has_initial_stop_and_only_one_send(self) -> None:
         api = FakeMT5()
-        api.check_retcode = 0
         broker = self.broker(api, auto=True)
         broker.arm_demo_execution()
         receipt = broker.submit_bracket(plan())
@@ -208,7 +206,6 @@ class MT5DemoBrokerTests(unittest.TestCase):
 
     def test_ambiguous_send_result_raises_timeout_without_retry(self) -> None:
         api = FakeMT5()
-        api.check_retcode = 0
         api.send_result = None
         broker = self.broker(api, auto=True)
         broker.arm_demo_execution()
