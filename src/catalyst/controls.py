@@ -161,11 +161,19 @@ class OperatorControlPlane:
             _require_utc(dashboard_source_at, "dashboard_source_at")
         if not self._authenticated(token):
             return self._result(
-                command, False, "AUTH_FAILED", "local control authentication failed", occurred_at
+                command,
+                False,
+                "AUTH_FAILED",
+                "local control authentication failed",
+                occurred_at,
             )
         if not confirmed:
             return self._result(
-                command, False, "CONFIRMATION_REQUIRED", "control action was not confirmed", occurred_at
+                command,
+                False,
+                "CONFIRMATION_REQUIRED",
+                "control action was not confirmed",
+                occurred_at,
             )
 
         if command is ControlCommand.KILL_SWITCH:
@@ -241,7 +249,10 @@ class OperatorControlPlane:
                 details={"reason": reason},
             )
             if not journaled:
-                self.kill_switch.engage(occurred_at=occurred_at, reason="audit failure during clear")
+                self.kill_switch.engage(
+                    occurred_at=occurred_at,
+                    reason="audit failure during clear",
+                )
                 return self._result(
                     command,
                     False,
@@ -276,7 +287,11 @@ class OperatorControlPlane:
                     "automatic demo execution cannot arm without a healthy audit journal",
                     occurred_at,
                 )
-            if dashboard_source_at is None or occurred_at - dashboard_source_at > self.maximum_dashboard_age:
+            stale_or_missing = (
+                dashboard_source_at is None
+                or occurred_at - dashboard_source_at > self.maximum_dashboard_age
+            )
+            if stale_or_missing:
                 return self._result(
                     command,
                     False,
