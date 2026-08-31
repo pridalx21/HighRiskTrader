@@ -13,7 +13,6 @@ from hashlib import sha256
 from json import loads
 from pathlib import Path
 from random import Random
-from statistics import median
 from typing import Any
 
 from catalyst.domain.serialization import canonical_json, to_canonical_value
@@ -38,23 +37,27 @@ class ValidationObservation:
     excluded_reason: str | None = None
 
     def __post_init__(self) -> None:
-        if not all(
-            value.strip()
-            for value in (
-                self.observation_id,
-                self.event_family,
-                self.instrument,
-                self.regime,
-                self.source,
-            )
-        ):
+        texts = (
+            self.observation_id,
+            self.event_family,
+            self.instrument,
+            self.regime,
+            self.source,
+        )
+        if not all(value.strip() for value in texts):
             raise ValueError("validation observation identifiers must not be empty")
         _require_utc(self.occurred_at, "occurred_at")
         if self.source not in {"historical", "demo"}:
             raise ValueError("validation source must be historical or demo")
-        for field_name in ("r_after_costs", "intended_slippage_r", "actual_slippage_r"):
+        for field_name in (
+            "r_after_costs",
+            "intended_slippage_r",
+            "actual_slippage_r",
+        ):
             value = getattr(self, field_name)
-            if value is not None and (not isinstance(value, Decimal) or not value.is_finite()):
+            if value is not None and (
+                not isinstance(value, Decimal) or not value.is_finite()
+            ):
                 raise ValueError(f"{field_name} must be a finite Decimal when present")
         if self.traded and self.r_after_costs is None:
             raise ValueError("traded observations require r_after_costs")
@@ -85,19 +88,20 @@ class ValidationConfig:
             raise ValueError("evaluation_fraction must be between zero and one")
         if self.walk_forward_folds < 1 or self.bootstrap_iterations < 1:
             raise ValueError("walk_forward_folds and bootstrap_iterations must be positive")
-        for field_name in (
+        non_negative = (
             "monthly_loss_cap_r",
             "stress_cost_r",
             "stress_delay_r",
             "unattended_demo_weeks",
-        ):
+        )
+        for field_name in non_negative:
             value = getattr(self, field_name)
             if not isinstance(value, Decimal) or not value.is_finite() or value < ZERO:
                 raise ValueError(f"{field_name} must be a finite non-negative Decimal")
         for field_name in ("rejection_probability", "missed_fill_probability"):
             value = getattr(self, field_name)
-            if not ZERO <= value <= ONE:
-                raise ValueError(f"{field_name} must be between zero and one")
+            if not isinstance(value, Decimal) or not ZERO <= value <= ONE:
+                raise ValueError(f"{field_name} must be a Decimal between zero and one")
 
 
 def _require_utc(value: datetime, field_name: str) -> None:
@@ -108,7 +112,10 @@ def _require_utc(value: datetime, field_name: str) -> None:
 
 
 def _parse_utc(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("occurred_at must be ISO-8601") from exc
     _require_utc(parsed, "occurred_at")
     return parsed
 
@@ -122,9 +129,15 @@ def _decimal_or_none(value: object) -> Decimal | None:
     return result
 
 
+def _boolean(row: dict[str, Any], field_name: str) -> bool:
+    value = row.get(field_name)
+    if type(value) is not bool:
+        raise ValueError(f"{field_name} must be a JSON boolean")
+    return value
+
+
 def load_observations_json(path: str | Path) -> tuple[ValidationObservation, ...]:
-    raw_text = Path(path).read_text(encoding="utf-8")
-    payload = loads(raw_text)
+    payload = loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, list) or not payload:
         raise ValueError("validation input must be a non-empty JSON array")
     observations: list[ValidationObservation] = []
@@ -136,6 +149,7 @@ def load_observations_json(path: str | Path) -> tuple[ValidationObservation, ...
         if observation_id in seen:
             raise ValueError(f"duplicate validation observation_id: {observation_id}")
         seen.add(observation_id)
+        excluded_raw = row.get("excluded_reason")
         observations.append(
             ValidationObservation(
                 observation_id=observation_id,
@@ -144,24 +158,30 @@ def load_observations_json(path: str | Path) -> tuple[ValidationObservation, ...
                 instrument=str(row.get("instrument", "")),
                 regime=str(row.get("regime", "")),
                 source=str(row.get("source", "")),
-                qualified=bool(row.get("qualified", False)),
-                traded=bool(row.get("traded", False)),
+                qualified=_boolean(row, "qualified"),
+                traded=_boolean(row, "traded"),
                 r_after_costs=_decimal_or_none(row.get("r_after_costs")),
                 intended_slippage_r=_decimal_or_none(row.get("intended_slippage_r")),
                 actual_slippage_r=_decimal_or_none(row.get("actual_slippage_r")),
-                excluded_reason=(
-                    str(row["excluded_reason"]) if row.get("excluded_reason") is not None else None
-                ),
+                excluded_reason=(str(excluded_raw) if excluded_raw is not None else None),
             )
         )
-    return tuple(sorted(observations, key=lambda item: (item.occurred_at, item.observation_id)))
+    return tuple(
+        sorted(observations, key=lambda item: (item.occurred_at, item.observation_id))
+    )
+
+
+def _included(rows: tuple[ValidationObservation, ...]) -> tuple[ValidationObservation, ...]:
+    return tuple(row for row in rows if row.excluded_reason is None)
 
 
 def _trade_values(rows: tuple[ValidationObservation, ...]) -> tuple[Decimal, ...]:
     return tuple(
         row.r_after_costs
         for row in rows
-        if row.excluded_reason is None and row.traded and row.r_after_costs is not None
+        if row.excluded_reason is None
+        and row.traded
+        and row.r_after_costs is not None
     )
 
 
@@ -169,20 +189,20 @@ def _max_drawdown(values: tuple[Decimal, ...]) -> tuple[Decimal, int]:
     equity = ZERO
     peak = ZERO
     maximum = ZERO
-    duration = 0
+    maximum_duration = 0
     current_duration = 0
     for value in values:
         equity += value
         if equity >= peak:
             peak = equity
             current_duration = 0
-        else:
-            current_duration += 1
-            drawdown = peak - equity
-            if drawdown > maximum:
-                maximum = drawdown
-                duration = current_duration
-    return maximum, duration
+            continue
+        current_duration += 1
+        drawdown = peak - equity
+        if drawdown > maximum:
+            maximum = drawdown
+            maximum_duration = current_duration
+    return maximum, maximum_duration
 
 
 def _longest_losing_streak(values: tuple[Decimal, ...]) -> int:
@@ -205,24 +225,14 @@ def _profit_factor(values: tuple[Decimal, ...]) -> Decimal | None:
     return wins / losses
 
 
-def _largest_winner_contribution(values: tuple[Decimal, ...], count: int = 5) -> Decimal:
+def _winner_concentration(
+    values: tuple[Decimal, ...], count: int
+) -> Decimal:
     positive = sorted((value for value in values if value > ZERO), reverse=True)
     total = sum(positive, ZERO)
     if total == ZERO:
         return ZERO
     return sum(positive[:count], ZERO) / total
-
-
-def _dimension_breakdown(
-    rows: tuple[ValidationObservation, ...], field_name: str
-) -> dict[str, dict[str, Any]]:
-    groups: dict[str, list[ValidationObservation]] = {}
-    for row in rows:
-        if row.excluded_reason is not None:
-            continue
-        key = str(getattr(row, field_name))
-        groups.setdefault(key, []).append(row)
-    return {key: _metrics(tuple(group)) for key, group in sorted(groups.items())}
 
 
 def _family_profit_concentration(rows: tuple[ValidationObservation, ...]) -> Decimal:
@@ -239,36 +249,38 @@ def _family_profit_concentration(rows: tuple[ValidationObservation, ...]) -> Dec
 
 
 def _metrics(rows: tuple[ValidationObservation, ...]) -> dict[str, Any]:
-    included = tuple(row for row in rows if row.excluded_reason is None)
+    included = _included(rows)
     values = _trade_values(included)
     wins = tuple(value for value in values if value > ZERO)
     losses = tuple(value for value in values if value < ZERO)
     maximum_drawdown, drawdown_duration = _max_drawdown(values)
-    qualified_count = sum(1 for row in included if row.qualified)
     trade_count = len(values)
+    qualified_count = sum(1 for row in included if row.qualified)
     no_trade_count = sum(1 for row in included if row.qualified and not row.traded)
     expectancy = sum(values, ZERO) / Decimal(trade_count) if trade_count else ZERO
-    avg_win = sum(wins, ZERO) / Decimal(len(wins)) if wins else ZERO
-    avg_loss = sum(losses, ZERO) / Decimal(len(losses)) if losses else ZERO
+    average_win = sum(wins, ZERO) / Decimal(len(wins)) if wins else ZERO
+    average_loss = sum(losses, ZERO) / Decimal(len(losses)) if losses else ZERO
     return {
         "observation_count": len(included),
         "qualified_setup_count": qualified_count,
         "trade_count": trade_count,
         "no_trade_count": no_trade_count,
         "expectancy_r": expectancy,
-        "average_win_r": avg_win,
-        "average_loss_r": avg_loss,
+        "average_win_r": average_win,
+        "average_loss_r": average_loss,
         "profit_factor": _profit_factor(values),
         "maximum_drawdown_r": maximum_drawdown,
         "drawdown_duration_trades": drawdown_duration,
         "longest_losing_streak": _longest_losing_streak(values),
-        "five_largest_winner_contribution": _largest_winner_contribution(values),
+        "largest_winner_contribution": _winner_concentration(values, 1),
+        "five_largest_winner_contribution": _winner_concentration(values, 5),
         "largest_event_family_profit_contribution": _family_profit_concentration(included),
     }
 
 
 def _chronological_split(
-    historical: tuple[ValidationObservation, ...], fraction: Decimal
+    historical: tuple[ValidationObservation, ...],
+    fraction: Decimal,
 ) -> tuple[tuple[ValidationObservation, ...], tuple[ValidationObservation, ...]]:
     if len(historical) < 2:
         return historical, ()
@@ -278,7 +290,8 @@ def _chronological_split(
 
 
 def _walk_forward(
-    historical: tuple[ValidationObservation, ...], folds: int
+    historical: tuple[ValidationObservation, ...],
+    folds: int,
 ) -> tuple[dict[str, Any], ...]:
     if len(historical) < 3:
         return ()
@@ -300,6 +313,43 @@ def _walk_forward(
             }
         )
     return tuple(reports)
+
+
+def _group_breakdown(
+    rows: tuple[ValidationObservation, ...],
+    key_name: str,
+) -> dict[str, dict[str, Any]]:
+    groups: dict[str, list[ValidationObservation]] = {}
+    for row in _included(rows):
+        key = str(getattr(row, key_name))
+        groups.setdefault(key, []).append(row)
+    return {key: _metrics(tuple(group)) for key, group in sorted(groups.items())}
+
+
+def _year_breakdown(
+    rows: tuple[ValidationObservation, ...],
+) -> dict[str, dict[str, Any]]:
+    groups: dict[str, list[ValidationObservation]] = {}
+    for row in _included(rows):
+        groups.setdefault(str(row.occurred_at.year), []).append(row)
+    return {key: _metrics(tuple(group)) for key, group in sorted(groups.items())}
+
+
+def _holdouts(
+    rows: tuple[ValidationObservation, ...],
+    key_name: str,
+) -> dict[str, dict[str, Any]]:
+    included = _included(rows)
+    keys = sorted({str(getattr(row, key_name)) for row in included})
+    result: dict[str, dict[str, Any]] = {}
+    for key in keys:
+        held_out = tuple(row for row in included if str(getattr(row, key_name)) == key)
+        remaining = tuple(row for row in included if str(getattr(row, key_name)) != key)
+        result[key] = {
+            "held_out_metrics": _metrics(held_out),
+            "remaining_metrics": _metrics(remaining),
+        }
+    return result
 
 
 def _stress_rows(
@@ -327,13 +377,13 @@ def _stress_rows(
 
 
 def _stress_scenarios(
-    rows: tuple[ValidationObservation, ...], config: ValidationConfig
+    rows: tuple[ValidationObservation, ...],
+    config: ValidationConfig,
 ) -> dict[str, dict[str, Any]]:
-    combined_cost = config.stress_cost_r
     return {
         "base": _metrics(rows),
         "wider_spread_commission_slippage": _metrics(
-            _stress_rows(rows, penalty=combined_cost, seed=config.seed + 1)
+            _stress_rows(rows, penalty=config.stress_cost_r, seed=config.seed + 1)
         ),
         "execution_delay": _metrics(
             _stress_rows(rows, penalty=config.stress_delay_r, seed=config.seed + 2)
@@ -374,7 +424,8 @@ def _monthly_counts(rows: tuple[ValidationObservation, ...]) -> tuple[int, ...]:
 
 
 def _bootstrap(
-    rows: tuple[ValidationObservation, ...], config: ValidationConfig
+    rows: tuple[ValidationObservation, ...],
+    config: ValidationConfig,
 ) -> dict[str, Any]:
     values = _trade_values(rows)
     if not values:
@@ -408,7 +459,7 @@ def _bootstrap(
     return {
         "iterations": config.bootstrap_iterations,
         "expectancy_r_p05": _quantile(expectancies, Decimal("0.05")),
-        "expectancy_r_p50": Decimal(str(median(expectancies))),
+        "expectancy_r_p50": _quantile(expectancies, Decimal("0.50")),
         "expectancy_r_p95": _quantile(expectancies, Decimal("0.95")),
         "max_drawdown_r_p95": _quantile(drawdowns, Decimal("0.95")),
         "monthly_loss_cap_breach_probability": Decimal(monthly_breaches)
@@ -426,13 +477,17 @@ def _demo_comparison(rows: tuple[ValidationObservation, ...]) -> dict[str, Any]:
         and row.actual_slippage_r is not None
     )
     if not comparable:
-        return {"comparable_orders": 0, "mean_actual_minus_intended_slippage_r": None}
+        return {
+            "comparable_orders": 0,
+            "mean_actual_minus_intended_slippage_r": None,
+        }
     differences = tuple(
-        row.actual_slippage_r - row.intended_slippage_r  # type: ignore[operator]
+        row.actual_slippage_r - row.intended_slippage_r
         for row in comparable
+        if row.actual_slippage_r is not None and row.intended_slippage_r is not None
     )
     return {
-        "comparable_orders": len(comparable),
+        "comparable_orders": len(differences),
         "mean_actual_minus_intended_slippage_r": sum(differences, ZERO)
         / Decimal(len(differences)),
     }
@@ -446,10 +501,14 @@ def _verdict(
     reasons: list[str] = []
     trade_count = int(evaluation["trade_count"])
     expectancy = Decimal(str(evaluation["expectancy_r"]))
-    profit_factor_raw = evaluation["profit_factor"]
-    profit_factor = Decimal(str(profit_factor_raw)) if profit_factor_raw is not None else ZERO
-    largest_trade_contribution = Decimal(str(evaluation["five_largest_winner_contribution"]))
-    family_contribution = Decimal(str(evaluation["largest_event_family_profit_contribution"]))
+    raw_profit_factor = evaluation["profit_factor"]
+    profit_factor = (
+        Decimal(str(raw_profit_factor)) if raw_profit_factor is not None else ZERO
+    )
+    largest_trade = Decimal(str(evaluation["largest_winner_contribution"]))
+    family_contribution = Decimal(
+        str(evaluation["largest_event_family_profit_contribution"])
+    )
 
     if trade_count < 100:
         reasons.append("fewer than 100 untouched evaluation trades")
@@ -457,8 +516,8 @@ def _verdict(
         reasons.append("out-of-sample expectancy is not positive")
     if profit_factor <= Decimal("1.20"):
         reasons.append("out-of-sample profit factor is not above 1.20")
-    if largest_trade_contribution > Decimal("0.20"):
-        reasons.append("largest-five winner concentration exceeds the conservative gate")
+    if largest_trade > Decimal("0.20"):
+        reasons.append("single-trade winner concentration exceeds 20%")
     if family_contribution > Decimal("0.50"):
         reasons.append("single event-family profit concentration exceeds 50%")
     if int(demo_comparison["comparable_orders"]) == 0:
@@ -474,14 +533,26 @@ def _verdict(
 
 
 def run_validation(
-    observations: tuple[ValidationObservation, ...], config: ValidationConfig
+    observations: tuple[ValidationObservation, ...],
+    config: ValidationConfig,
 ) -> dict[str, Any]:
     if not observations:
         raise ValueError("validation requires at least one observation")
-    ordered = tuple(sorted(observations, key=lambda item: (item.occurred_at, item.observation_id)))
-    historical = tuple(row for row in ordered if row.source == "historical" and row.excluded_reason is None)
-    demo = tuple(row for row in ordered if row.source == "demo" and row.excluded_reason is None)
-    development, evaluation = _chronological_split(historical, config.evaluation_fraction)
+    ordered = tuple(
+        sorted(observations, key=lambda item: (item.occurred_at, item.observation_id))
+    )
+    historical = tuple(
+        row
+        for row in ordered
+        if row.source == "historical" and row.excluded_reason is None
+    )
+    demo = tuple(
+        row for row in ordered if row.source == "demo" and row.excluded_reason is None
+    )
+    development, evaluation = _chronological_split(
+        historical,
+        config.evaluation_fraction,
+    )
     excluded = tuple(
         {"observation_id": row.observation_id, "reason": row.excluded_reason}
         for row in ordered
@@ -504,10 +575,12 @@ def run_validation(
         "evaluation": evaluation_metrics,
         "demo": _metrics(demo),
         "walk_forward": _walk_forward(historical, config.walk_forward_folds),
-        "event_family_holdouts": _dimension_breakdown(evaluation, "event_family"),
-        "instrument_holdouts": _dimension_breakdown(evaluation, "instrument"),
-        "year_breakdown": _dimension_breakdown(evaluation, "occurred_at"),
-        "regime_breakdown": _dimension_breakdown(evaluation, "regime"),
+        "event_family_holdouts": _holdouts(evaluation, "event_family"),
+        "instrument_holdouts": _holdouts(evaluation, "instrument"),
+        "event_family_breakdown": _group_breakdown(evaluation, "event_family"),
+        "instrument_breakdown": _group_breakdown(evaluation, "instrument"),
+        "year_breakdown": _year_breakdown(evaluation),
+        "regime_breakdown": _group_breakdown(evaluation, "regime"),
         "stress_scenarios": _stress_scenarios(evaluation, config),
         "bootstrap_monte_carlo": _bootstrap(evaluation, config),
         "demo_vs_replay": comparison,
@@ -541,15 +614,18 @@ def validation_markdown(report: dict[str, Any]) -> str:
             f"- Profit factor: {evaluation['profit_factor']}",
             f"- Maximum drawdown: {evaluation['maximum_drawdown_r']} R",
             f"- Longest losing streak: {evaluation['longest_losing_streak']}",
-            f"- Five-largest-winner contribution: {evaluation['five_largest_winner_contribution']}",
+            "- Five-largest-winner contribution: "
+            f"{evaluation['five_largest_winner_contribution']}",
             "",
             "## Fixed-seed bootstrap / Monte Carlo",
             "",
             f"- Iterations: {monte_carlo['iterations']}",
-            f"- Expectancy p05/p50/p95: {monte_carlo['expectancy_r_p05']} / "
-            f"{monte_carlo['expectancy_r_p50']} / {monte_carlo['expectancy_r_p95']} R",
+            "- Expectancy p05/p50/p95: "
+            f"{monte_carlo['expectancy_r_p05']} / "
+            f"{monte_carlo['expectancy_r_p50']} / "
+            f"{monte_carlo['expectancy_r_p95']} R",
             f"- Max drawdown p95: {monte_carlo['max_drawdown_r_p95']} R",
-            f"- Monthly loss-cap breach probability: "
+            "- Monthly loss-cap breach probability: "
             f"{monte_carlo['monthly_loss_cap_breach_probability']}",
             "",
             "## Promotion blockers / evidence",
