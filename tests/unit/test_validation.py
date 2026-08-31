@@ -49,10 +49,7 @@ class ValidationTests(unittest.TestCase):
             observation(index, Decimal("1") if index % 3 else Decimal("-0.5"))
             for index in range(30)
         )
-        demo = tuple(
-            observation(1000 + index, Decimal("0.5"), source="demo")
-            for index in range(3)
-        )
+        demo = tuple(observation(1000 + index, Decimal("0.5"), source="demo") for index in range(3))
         rows = historical + demo
         config = ValidationConfig(
             strategy_version="event-retest-v1",
@@ -102,8 +99,7 @@ class ValidationTests(unittest.TestCase):
             for index in range(360)
         )
         demo = tuple(
-            observation(1000 + index, Decimal("-0.1"), source="demo")
-            for index in range(10)
+            observation(1000 + index, Decimal("-0.1"), source="demo") for index in range(10)
         )
         config = ValidationConfig(
             strategy_version="losing-frozen",
@@ -140,9 +136,7 @@ class ValidationTests(unittest.TestCase):
             self.assertTrue((output / "validation_report.md").exists())
             self.assertTrue((output / "manifest.json").exists())
             self.assertEqual(len(manifest["input_hash"]), 64)
-            report_text = (output / "validation_report.json").read_text(
-                encoding="utf-8"
-            )
+            report_text = (output / "validation_report.json").read_text(encoding="utf-8")
             parsed = json.loads(report_text)
             self.assertEqual(parsed["verdict"], "REVISE")
 
