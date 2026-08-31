@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from catalyst.adapters.mt5_broker import MT5DemoBroker
 from catalyst.domain.enums import Direction
@@ -77,11 +77,11 @@ class MT5ReadAdapter:
     @staticmethod
     def _value(row: Any, name: str, default: object | None = None) -> object | None:
         if hasattr(row, name):
-            return getattr(row, name)
+            return cast(object | None, getattr(row, name))
         if isinstance(row, Mapping):
-            return row.get(name, default)
+            return cast(object | None, row.get(name, default))
         try:
-            return row[name]
+            return cast(object | None, row[name])
         except (KeyError, IndexError, TypeError):
             return default
 
@@ -100,11 +100,11 @@ class MT5ReadAdapter:
     def _timestamp(cls, row: Any) -> datetime:
         time_msc = cls._value(row, "time_msc")
         if time_msc is not None:
-            return datetime.fromtimestamp(int(time_msc) / 1000, UTC)
+            return datetime.fromtimestamp(int(str(time_msc)) / 1000, UTC)
         seconds = cls._value(row, "time")
         if seconds is None:
             raise RuntimeError("MT5 row has no timestamp")
-        return datetime.fromtimestamp(int(seconds), UTC)
+        return datetime.fromtimestamp(int(str(seconds)), UTC)
 
     def _ready(self) -> Any:
         self.broker._ensure_connected()
