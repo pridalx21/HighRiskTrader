@@ -299,6 +299,7 @@ class OperatorControlPlane:
                     "automatic demo execution cannot arm from stale or missing dashboard state",
                     occurred_at,
                 )
+            assert dashboard_source_at is not None
             if dashboard_source_at > occurred_at:
                 return self._result(
                     command,
