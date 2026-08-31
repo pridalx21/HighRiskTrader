@@ -36,9 +36,7 @@ class FakeReadMT5:
         self.position_rows: tuple[object, ...] | None = ()
         self.order_rows: tuple[object, ...] | None = ()
         self.deal_rows: tuple[object, ...] | None = ()
-        self.latest = SimpleNamespace(
-            time_msc=int(NOW.timestamp() * 1000), bid=100.0, ask=100.2
-        )
+        self.latest = SimpleNamespace(time_msc=int(NOW.timestamp() * 1000), bid=100.0, ask=100.2)
 
     def initialize(self, *, path: str) -> bool:
         return bool(path)
@@ -96,9 +94,7 @@ class FakeReadMT5:
     def orders_get(self) -> tuple[object, ...] | None:
         return self.order_rows
 
-    def history_deals_get(
-        self, start: datetime, end: datetime
-    ) -> tuple[object, ...] | None:
+    def history_deals_get(self, start: datetime, end: datetime) -> tuple[object, ...] | None:
         assert start < end
         return self.deal_rows
 
@@ -269,9 +265,7 @@ class MT5ReadAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.read.ticks_between("US100", NOW, NOW)
         with self.assertRaises(ValueError):
-            self.read.bars_between(
-                "US100", NOW - timedelta(seconds=1), NOW, timeframe_seconds=0
-            )
+            self.read.bars_between("US100", NOW - timedelta(seconds=1), NOW, timeframe_seconds=0)
         with self.assertRaises(ValueError):
             self.read.latest_tick("US100", at=NOW, maximum_age=timedelta(0))
         self.api.tick_rows = None
