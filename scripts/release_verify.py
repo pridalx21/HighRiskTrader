@@ -42,9 +42,7 @@ def tracked_files() -> tuple[Path, ...]:
 
 
 def _is_environment_example(name: str) -> bool:
-    return name == ".env.example" or (
-        name.startswith(".env.") and name.endswith(".example")
-    )
+    return name == ".env.example" or (name.startswith(".env.") and name.endswith(".example"))
 
 
 def violations(files: tuple[Path, ...]) -> tuple[str, ...]:
