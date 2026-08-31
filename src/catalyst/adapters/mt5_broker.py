@@ -100,7 +100,10 @@ class MT5DemoConfig:
             raise ValueError("symbol_mapping must not be empty")
         if set(self.symbol_mapping) != set(self.symbol_economics):
             raise ValueError("every logical symbol requires explicit economics")
-        if any(not key.strip() or not value.strip() for key, value in self.symbol_mapping.items()):
+        if any(
+            not logical.strip() or not broker.strip()
+            for logical, broker in self.symbol_mapping.items()
+        ):
             raise ValueError("symbol mappings must contain non-empty names")
         if self.reconnect_attempts < 0:
             raise ValueError("reconnect_attempts must be non-negative")
@@ -111,7 +114,7 @@ class MT5DemoConfig:
 
 
 class MT5DemoBroker:
-    """BrokerPort + reconciliation adapter for one positively verified demo account."""
+    """BrokerPort + reconciliation adapter for one verified demo account."""
 
     def __init__(
         self,
@@ -140,7 +143,7 @@ class MT5DemoBroker:
         return self._mt5
 
     def connect(self) -> None:
-        """Connect to the configured terminal and positively verify demo mode."""
+        """Connect with bounded retries and positively verify demo mode."""
 
         api = self._api()
         attempts = self.config.reconnect_attempts + 1
@@ -152,10 +155,16 @@ class MT5DemoBroker:
             )
             if logged_in:
                 self._connected = True
-                self._verify_demo_account()
+                try:
+                    self._verify_demo_account()
+                except Exception:
+                    self._connected = False
+                    self._armed = False
+                    raise
                 return
             last_error = api.last_error()
             self._connected = False
+            self._armed = False
             if attempt + 1 < attempts:
                 self._sleeper(float(self.config.reconnect_delay_seconds))
         raise RuntimeError(f"MT5 connection failed after bounded retries: {last_error!r}")
@@ -182,8 +191,7 @@ class MT5DemoBroker:
         if not self._connected:
             self.connect()
             return
-        api = self._api()
-        terminal = api.terminal_info()
+        terminal = self._api().terminal_info()
         if terminal is None or not bool(getattr(terminal, "connected", False)):
             self._connected = False
             self._armed = False
@@ -285,7 +293,7 @@ class MT5DemoBroker:
         if not self._armed:
             raise RuntimeError("automatic demo execution is not explicitly armed")
         self._ensure_connected()
-        self._verify_demo_account()  # positive check immediately before order path
+        self._verify_demo_account()
         if not plan.server_side_stop_required:
             raise RuntimeError("broker-side protective stop is mandatory")
         contract = self.contract_for(plan.symbol)
@@ -298,9 +306,7 @@ class MT5DemoBroker:
         broker_symbol = self._broker_symbol(plan.symbol)
         if not bool(api.symbol_select(broker_symbol, True)):
             raise RuntimeError(f"MT5 symbol could not be selected: {broker_symbol}")
-        order_type = (
-            api.ORDER_TYPE_BUY if plan.direction is Direction.LONG else api.ORDER_TYPE_SELL
-        )
+        order_type = api.ORDER_TYPE_BUY if plan.direction is Direction.LONG else api.ORDER_TYPE_SELL
         request = {
             "action": api.TRADE_ACTION_DEAL,
             "symbol": broker_symbol,
@@ -319,6 +325,7 @@ class MT5DemoBroker:
             raise RuntimeError("MT5 order_check returned no result")
         check_code = int(getattr(checked, "retcode", -1))
         check_ok = check_code in {
+            0,
             int(getattr(api, "TRADE_RETCODE_DONE", -999999)),
             int(getattr(api, "TRADE_RETCODE_PLACED", -999998)),
         }
@@ -331,7 +338,7 @@ class MT5DemoBroker:
                 message=str(getattr(checked, "comment", "order_check rejected")),
             )
 
-        result = api.order_send(request)  # exactly one submission attempt
+        result = api.order_send(request)
         if result is None:
             raise TimeoutError("MT5 order_send returned no result; outcome is uncertain")
         retcode = int(getattr(result, "retcode", -1))
@@ -359,7 +366,7 @@ class MT5DemoBroker:
         return f"CAT-{token}"
 
     def lookup_order(self, intent: OrderIntentRecord) -> BrokerOrderLookup:
-        """Read-only lookup used after restart; never submits or arms execution."""
+        """Read-only restart lookup; this method never arms or submits."""
 
         self._ensure_connected()
         self._verify_demo_account()
