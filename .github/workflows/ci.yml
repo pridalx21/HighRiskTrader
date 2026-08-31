@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
@@ -18,3 +20,11 @@ jobs:
       - run: ruff format --check .
       - run: mypy src
       - run: pytest --cov=catalyst --cov-report=term-missing
+      - run: PYTHONPATH=src python -m catalyst.demo
+      - run: PYTHONPATH=src python -m catalyst.replay_demo
+      - run: >-
+          PYTHONPATH=src python -m catalyst.validation_cli
+          config/validation.example.json /tmp/catalyst-validation
+          --strategy-version synthetic-ci --iterations 20
+      - run: python -m compileall -q src tests scripts
+      - run: python scripts/release_verify.py

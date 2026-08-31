@@ -1,0 +1,23 @@
+[
+  {"observation_id":"SYNTH-001","occurred_at":"2025-01-10T13:30:00Z","event_family":"CPI","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.8"},
+  {"observation_id":"SYNTH-002","occurred_at":"2025-02-07T13:30:00Z","event_family":"NFP","instrument":"XAUUSD","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"-0.4"},
+  {"observation_id":"SYNTH-003","occurred_at":"2025-03-12T12:30:00Z","event_family":"CPI","instrument":"US100","regime":"high_vol","source":"historical","qualified":true,"traded":false,"r_after_costs":null},
+  {"observation_id":"SYNTH-004","occurred_at":"2025-04-04T12:30:00Z","event_family":"NFP","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"1.1"},
+  {"observation_id":"SYNTH-005","occurred_at":"2025-05-13T12:30:00Z","event_family":"CPI","instrument":"XAUUSD","regime":"high_vol","source":"historical","qualified":true,"traded":true,"r_after_costs":"-0.6"},
+  {"observation_id":"SYNTH-006","occurred_at":"2025-06-06T12:30:00Z","event_family":"NFP","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.5"},
+  {"observation_id":"SYNTH-007","occurred_at":"2025-07-15T12:30:00Z","event_family":"CPI","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.4"},
+  {"observation_id":"SYNTH-008","occurred_at":"2025-08-01T12:30:00Z","event_family":"NFP","instrument":"XAUUSD","regime":"high_vol","source":"historical","qualified":true,"traded":false,"r_after_costs":null},
+  {"observation_id":"SYNTH-009","occurred_at":"2025-09-10T12:30:00Z","event_family":"CPI","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"-0.3"},
+  {"observation_id":"SYNTH-010","occurred_at":"2025-10-03T12:30:00Z","event_family":"NFP","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.9"},
+  {"observation_id":"SYNTH-011","occurred_at":"2025-11-13T13:30:00Z","event_family":"CPI","instrument":"XAUUSD","regime":"high_vol","source":"historical","qualified":true,"traded":true,"r_after_costs":"-0.5"},
+  {"observation_id":"SYNTH-012","occurred_at":"2025-12-05T13:30:00Z","event_family":"NFP","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.7"},
+  {"observation_id":"SYNTH-013","occurred_at":"2026-01-14T13:30:00Z","event_family":"CPI","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.6"},
+  {"observation_id":"SYNTH-014","occurred_at":"2026-02-06T13:30:00Z","event_family":"NFP","instrument":"XAUUSD","regime":"high_vol","source":"historical","qualified":true,"traded":true,"r_after_costs":"-0.2"},
+  {"observation_id":"SYNTH-015","occurred_at":"2026-03-11T12:30:00Z","event_family":"CPI","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.8"},
+  {"observation_id":"SYNTH-016","occurred_at":"2026-04-03T12:30:00Z","event_family":"NFP","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":false,"r_after_costs":null},
+  {"observation_id":"SYNTH-017","occurred_at":"2026-05-13T12:30:00Z","event_family":"CPI","instrument":"XAUUSD","regime":"high_vol","source":"historical","qualified":true,"traded":true,"r_after_costs":"0.3"},
+  {"observation_id":"SYNTH-018","occurred_at":"2026-06-05T12:30:00Z","event_family":"NFP","instrument":"US100","regime":"normal","source":"historical","qualified":true,"traded":true,"r_after_costs":"-0.4"},
+  {"observation_id":"SYNTH-D01","occurred_at":"2026-07-10T12:30:00Z","event_family":"CPI","instrument":"US100","regime":"normal","source":"demo","qualified":true,"traded":true,"r_after_costs":"0.2","intended_slippage_r":"0.03","actual_slippage_r":"0.04"},
+  {"observation_id":"SYNTH-D02","occurred_at":"2026-08-07T12:30:00Z","event_family":"NFP","instrument":"XAUUSD","regime":"high_vol","source":"demo","qualified":true,"traded":true,"r_after_costs":"-0.1","intended_slippage_r":"0.03","actual_slippage_r":"0.05"},
+  {"observation_id":"SYNTH-D03","occurred_at":"2026-08-14T12:30:00Z","event_family":"CPI","instrument":"US100","regime":"normal","source":"demo","qualified":true,"traded":false,"r_after_costs":null,"intended_slippage_r":null,"actual_slippage_r":null}
+]
