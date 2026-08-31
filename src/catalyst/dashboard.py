@@ -169,7 +169,9 @@ def render_streamlit(
         )
 
     st.subheader("Controls")
-    st.caption("Controls are typed. This page has no direction, entry, stop, volume, or risk inputs.")
+    st.caption(
+        "Controls are typed. This page has no direction, entry, stop, volume, or risk inputs."
+    )
     confirm = st.checkbox("Confirm next control action")
     c1, c2, c3, c4 = st.columns(4)
     if c1.button("ARM AUTO-DEMO", disabled=stale or controls.kill_switch.active):
