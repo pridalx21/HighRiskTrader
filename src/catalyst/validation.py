@@ -55,9 +55,7 @@ class ValidationObservation:
             "actual_slippage_r",
         ):
             value = getattr(self, field_name)
-            if value is not None and (
-                not isinstance(value, Decimal) or not value.is_finite()
-            ):
+            if value is not None and (not isinstance(value, Decimal) or not value.is_finite()):
                 raise ValueError(f"{field_name} must be a finite Decimal when present")
         if self.traded and self.r_after_costs is None:
             raise ValueError("traded observations require r_after_costs")
@@ -166,9 +164,7 @@ def load_observations_json(path: str | Path) -> tuple[ValidationObservation, ...
                 excluded_reason=(str(excluded_raw) if excluded_raw is not None else None),
             )
         )
-    return tuple(
-        sorted(observations, key=lambda item: (item.occurred_at, item.observation_id))
-    )
+    return tuple(sorted(observations, key=lambda item: (item.occurred_at, item.observation_id)))
 
 
 def _included(rows: tuple[ValidationObservation, ...]) -> tuple[ValidationObservation, ...]:
@@ -179,9 +175,7 @@ def _trade_values(rows: tuple[ValidationObservation, ...]) -> tuple[Decimal, ...
     return tuple(
         row.r_after_costs
         for row in rows
-        if row.excluded_reason is None
-        and row.traded
-        and row.r_after_costs is not None
+        if row.excluded_reason is None and row.traded and row.r_after_costs is not None
     )
 
 
@@ -225,9 +219,7 @@ def _profit_factor(values: tuple[Decimal, ...]) -> Decimal | None:
     return wins / losses
 
 
-def _winner_concentration(
-    values: tuple[Decimal, ...], count: int
-) -> Decimal:
+def _winner_concentration(values: tuple[Decimal, ...], count: int) -> Decimal:
     positive = sorted((value for value in values if value > ZERO), reverse=True)
     total = sum(positive, ZERO)
     if total == ZERO:
@@ -488,8 +480,7 @@ def _demo_comparison(rows: tuple[ValidationObservation, ...]) -> dict[str, Any]:
     )
     return {
         "comparable_orders": len(differences),
-        "mean_actual_minus_intended_slippage_r": sum(differences, ZERO)
-        / Decimal(len(differences)),
+        "mean_actual_minus_intended_slippage_r": sum(differences, ZERO) / Decimal(len(differences)),
     }
 
 
@@ -502,13 +493,9 @@ def _verdict(
     trade_count = int(evaluation["trade_count"])
     expectancy = Decimal(str(evaluation["expectancy_r"]))
     raw_profit_factor = evaluation["profit_factor"]
-    profit_factor = (
-        Decimal(str(raw_profit_factor)) if raw_profit_factor is not None else ZERO
-    )
+    profit_factor = Decimal(str(raw_profit_factor)) if raw_profit_factor is not None else ZERO
     largest_trade = Decimal(str(evaluation["largest_winner_contribution"]))
-    family_contribution = Decimal(
-        str(evaluation["largest_event_family_profit_contribution"])
-    )
+    family_contribution = Decimal(str(evaluation["largest_event_family_profit_contribution"]))
 
     if trade_count < 100:
         reasons.append("fewer than 100 untouched evaluation trades")
@@ -538,17 +525,11 @@ def run_validation(
 ) -> dict[str, Any]:
     if not observations:
         raise ValueError("validation requires at least one observation")
-    ordered = tuple(
-        sorted(observations, key=lambda item: (item.occurred_at, item.observation_id))
-    )
+    ordered = tuple(sorted(observations, key=lambda item: (item.occurred_at, item.observation_id)))
     historical = tuple(
-        row
-        for row in ordered
-        if row.source == "historical" and row.excluded_reason is None
+        row for row in ordered if row.source == "historical" and row.excluded_reason is None
     )
-    demo = tuple(
-        row for row in ordered if row.source == "demo" and row.excluded_reason is None
-    )
+    demo = tuple(row for row in ordered if row.source == "demo" and row.excluded_reason is None)
     development, evaluation = _chronological_split(
         historical,
         config.evaluation_fraction,
@@ -614,8 +595,7 @@ def validation_markdown(report: dict[str, Any]) -> str:
             f"- Profit factor: {evaluation['profit_factor']}",
             f"- Maximum drawdown: {evaluation['maximum_drawdown_r']} R",
             f"- Longest losing streak: {evaluation['longest_losing_streak']}",
-            "- Five-largest-winner contribution: "
-            f"{evaluation['five_largest_winner_contribution']}",
+            f"- Five-largest-winner contribution: {evaluation['five_largest_winner_contribution']}",
             "",
             "## Fixed-seed bootstrap / Monte Carlo",
             "",
