@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "catalyst-mvp"
 version = "0.1.0"
-description = "Demo-only event-conditioned trading system MVP starter"
+description = "Demo-only event-conditioned trading system MVP"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary - private research project" }
@@ -25,6 +25,7 @@ ui = ["plotly>=5.24,<7", "streamlit>=1.40,<2"]
 [project.scripts]
 catalyst-demo = "catalyst.demo:main"
 catalyst-kill-switch = "catalyst.kill_switch_cli:main"
+catalyst-mt5-shadow-smoke = "catalyst.mt5_shadow_smoke:main"
 catalyst-validate = "catalyst.validation_cli:main"
 
 [tool.setuptools.packages.find]
@@ -46,6 +47,7 @@ omit = [
   "src/catalyst/dashboard.py",
   "src/catalyst/demo.py",
   "src/catalyst/kill_switch_cli.py",
+  "src/catalyst/mt5_shadow_smoke.py",
   "src/catalyst/replay_demo.py",
   "src/catalyst/validation_cli.py",
 ]
