@@ -36,10 +36,7 @@ pythonpath = ["src"]
 [tool.coverage.run]
 branch = true
 source = ["catalyst"]
-# Entry-point demos are verified as commands; the MT5 placeholder remains
-# deliberately unimplemented until Phase 4. Coverage measures executable core.
 omit = [
-  "src/catalyst/adapters/mt5_broker.py",
   "src/catalyst/demo.py",
   "src/catalyst/replay_demo.py",
 ]
