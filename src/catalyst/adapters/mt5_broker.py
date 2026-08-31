@@ -271,9 +271,7 @@ class MT5DemoBroker:
         return BrokerContract(
             symbol=symbol,
             tick_size=self._decimal(getattr(info, "trade_tick_size", None), "trade_tick_size"),
-            tick_value=self._decimal(
-                getattr(info, "trade_tick_value", None), "trade_tick_value"
-            ),
+            tick_value=self._decimal(getattr(info, "trade_tick_value", None), "trade_tick_value"),
             contract_size=self._decimal(
                 getattr(info, "trade_contract_size", None), "trade_contract_size"
             ),
