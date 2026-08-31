@@ -45,10 +45,15 @@ def observation(
 
 class ValidationTests(unittest.TestCase):
     def test_small_sample_is_revise_and_reproducible(self) -> None:
-        rows = tuple(
+        historical = tuple(
             observation(index, Decimal("1") if index % 3 else Decimal("-0.5"))
             for index in range(30)
-        ) + tuple(observation(1000 + index, Decimal("0.5"), source="demo") for index in range(3))
+        )
+        demo = tuple(
+            observation(1000 + index, Decimal("0.5"), source="demo")
+            for index in range(3)
+        )
+        rows = historical + demo
         config = ValidationConfig(
             strategy_version="event-retest-v1",
             bootstrap_iterations=25,
@@ -64,15 +69,20 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(first["demo_vs_replay"]["comparable_orders"], 3)
         self.assertIn("CPI", first["event_family_holdouts"])
         self.assertIn("US100", first["instrument_holdouts"])
+        self.assertIn("2025", first["year_breakdown"])
         self.assertIn("Verdict: **REVISE**", validation_markdown(first))
 
     def test_strong_distributed_evidence_can_continue(self) -> None:
         historical = tuple(
-            observation(index, Decimal("0.8") if index % 2 == 0 else Decimal("-0.2"))
+            observation(index, Decimal("-0.2") if index % 3 == 0 else Decimal("0.8"))
             for index in range(360)
         )
         demo = tuple(
-            observation(1000 + index, Decimal("0.4") if index % 2 == 0 else Decimal("-0.1"), source="demo")
+            observation(
+                1000 + index,
+                Decimal("-0.1") if index % 3 == 0 else Decimal("0.4"),
+                source="demo",
+            )
             for index in range(12)
         )
         config = ValidationConfig(
@@ -91,7 +101,10 @@ class ValidationTests(unittest.TestCase):
             observation(index, Decimal("0.1") if index < 250 else Decimal("-0.6"))
             for index in range(360)
         )
-        demo = tuple(observation(1000 + index, Decimal("-0.1"), source="demo") for index in range(10))
+        demo = tuple(
+            observation(1000 + index, Decimal("-0.1"), source="demo")
+            for index in range(10)
+        )
         config = ValidationConfig(
             strategy_version="losing-frozen",
             bootstrap_iterations=10,
@@ -113,7 +126,8 @@ class ValidationTests(unittest.TestCase):
         )
         self.assertEqual(len(report["excluded_observations"]), 1)
         self.assertEqual(
-            report["excluded_observations"][0]["reason"], "calendar timestamp ambiguous"
+            report["excluded_observations"][0]["reason"],
+            "calendar timestamp ambiguous",
         )
 
     def test_evidence_pack_writes_hashed_machine_and_markdown_outputs(self) -> None:
@@ -126,10 +140,13 @@ class ValidationTests(unittest.TestCase):
             self.assertTrue((output / "validation_report.md").exists())
             self.assertTrue((output / "manifest.json").exists())
             self.assertEqual(len(manifest["input_hash"]), 64)
-            parsed = json.loads((output / "validation_report.json").read_text(encoding="utf-8"))
+            report_text = (output / "validation_report.json").read_text(
+                encoding="utf-8"
+            )
+            parsed = json.loads(report_text)
             self.assertEqual(parsed["verdict"], "REVISE")
 
-    def test_json_loader_is_strict_about_duplicates_and_shape(self) -> None:
+    def test_json_loader_is_strict_about_duplicates_shape_and_booleans(self) -> None:
         payload = [
             {
                 "observation_id": "A",
@@ -154,6 +171,10 @@ class ValidationTests(unittest.TestCase):
             path.write_text("{}", encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_observations_json(path)
+            invalid_boolean = [dict(payload[0], qualified="true")]
+            path.write_text(json.dumps(invalid_boolean), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_observations_json(path)
 
     def test_invalid_observations_and_config_are_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -169,7 +190,7 @@ class ValidationTests(unittest.TestCase):
                 r_after_costs=Decimal("1"),
             )
         with self.assertRaises(ValueError):
-            observation(1, None).__class__(
+            ValidationObservation(
                 observation_id="bad2",
                 occurred_at=START,
                 event_family="CPI",
@@ -183,7 +204,10 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ValidationConfig(strategy_version="", bootstrap_iterations=1)
         with self.assertRaises(ValueError):
-            ValidationConfig(strategy_version="v1", evaluation_fraction=Decimal("1"))
+            ValidationConfig(
+                strategy_version="v1",
+                evaluation_fraction=Decimal("1"),
+            )
         with self.assertRaises(ValueError):
             run_validation((), ValidationConfig(strategy_version="v1"))
 
