@@ -36,7 +36,10 @@ pythonpath = ["src"]
 [tool.coverage.run]
 branch = true
 source = ["catalyst"]
+# External adapters and command entry points have explicit contract/command tests;
+# the 85% aggregate gate measures the deterministic executable core.
 omit = [
+  "src/catalyst/adapters/mt5_broker.py",
   "src/catalyst/demo.py",
   "src/catalyst/replay_demo.py",
 ]
