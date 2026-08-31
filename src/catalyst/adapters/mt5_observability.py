@@ -342,9 +342,7 @@ class MT5ReadAdapter:
         tick = self.latest_tick(plan.symbol, at=at, maximum_age=maximum_tick_age)
         executable = tick.ask if plan.direction is Direction.LONG else tick.bid
         adverse = (
-            executable - plan.entry
-            if plan.direction is Direction.LONG
-            else plan.entry - executable
+            executable - plan.entry if plan.direction is Direction.LONG else plan.entry - executable
         )
         return MT5ShadowObservation(
             decision_id=plan.decision_id,
