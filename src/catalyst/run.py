@@ -4,7 +4,7 @@ The command supports two modes:
 
 - default shadow: evaluate live events and write audit evidence, never submit;
 - --auto-demo: explicitly arm the verified demo broker and allow durable
-  at-most-once demo submissions.
+  at-most-once demo submissions plus reduce-risk intraday exits.
 
 There is intentionally no live-account mode.
 """
@@ -24,13 +24,20 @@ from typing import Any
 from catalyst.adapters.csv_event_feed import CsvEventFeed
 from catalyst.adapters.guarded_demo_broker import GuardedDemoBroker
 from catalyst.adapters.mt5_broker import MT5AccountRiskState, MT5DemoBroker, MT5DemoConfig
+from catalyst.adapters.mt5_exit import MT5ExitAdapter
 from catalyst.adapters.mt5_observability import MT5ReadAdapter
 from catalyst.adapters.sqlite_journal import SQLiteJournal
 from catalyst.config import RuntimeConfig, load_runtime_config
 from catalyst.controls import ControlCommand, LocalKillSwitch, OperatorControlPlane
 from catalyst.engine.reconciliation import RestartReconciler
 from catalyst.mt5_shadow_smoke import _economics, _mapping
-from catalyst.runtime import CatalystRuntime, LiveRuntimeConfig, load_live_runtime_config, utc_now
+from catalyst.runtime import (
+    CatalystRuntime,
+    LiveRuntimeConfig,
+    PositionStateStore,
+    load_live_runtime_config,
+    utc_now,
+)
 
 SOFTWARE_VERSION = "catalyst-mvp-0.1.0-runtime"
 AUTO_DEMO_CONFIRMATION = "DEMO_ONLY"
@@ -196,6 +203,18 @@ def _print_cycle(results: tuple[Any, ...], *, now: datetime) -> None:
         )
 
 
+def _engage_kill_switch(
+    *,
+    kill_switch: LocalKillSwitch,
+    broker: GuardedDemoBroker,
+    now: datetime,
+    reason: str,
+) -> None:
+    broker.disarm()
+    kill_switch.engage(occurred_at=now, reason=reason)
+    print("kill_switch=engaged runtime=exit_only")
+
+
 def _engage_on_uncertain(
     results: tuple[Any, ...],
     *,
@@ -209,9 +228,12 @@ def _engage_on_uncertain(
         for result in results
     )
     if unsafe:
-        broker.disarm()
-        kill_switch.engage(occurred_at=now, reason="runtime error or uncertain demo order outcome")
-        print("kill_switch=engaged runtime=stopped")
+        _engage_kill_switch(
+            kill_switch=kill_switch,
+            broker=broker,
+            now=now,
+            reason="runtime error or uncertain demo order outcome",
+        )
     return unsafe
 
 
@@ -232,6 +254,14 @@ def main() -> None:
     )
     mt5 = MT5DemoBroker(_mt5_config(auto_demo=auto_demo), risk_tracker)
     read = MT5ReadAdapter(mt5)
+    exit_adapter = MT5ExitAdapter(mt5) if auto_demo else None
+    position_store = (
+        PositionStateStore(
+            os.environ.get("CATALYST_POSITION_STATE_PATH", ".runtime/managed-positions.json")
+        )
+        if auto_demo
+        else None
+    )
     journal = SQLiteJournal.open(config.storage.journal_path, software_version=SOFTWARE_VERSION)
     guarded = GuardedDemoBroker(mt5, kill_switch)
     controls: OperatorControlPlane | None = None
@@ -280,9 +310,12 @@ def main() -> None:
                 dashboard_source_at=arm_at,
                 reason="catalyst-run explicit demo-auto startup",
             )
-            if not arm_result.accepted:
+            if arm_result.accepted:
+                print("runtime_mode=demo_auto armed=true")
+            elif arm_result.code == "KILL_SWITCH_ACTIVE":
+                print("runtime_mode=demo_auto armed=false exit_only=true")
+            else:
                 raise RuntimeError(f"demo-auto arm failed: {arm_result.code}: {arm_result.message}")
-            print("runtime_mode=demo_auto armed=true")
         else:
             print("runtime_mode=shadow armed=false orders_sent=0")
 
@@ -294,18 +327,30 @@ def main() -> None:
             market_data=read,
             events=tuple(record.event for record in feed.records),
             auto_demo=auto_demo,
+            exit_adapter=exit_adapter,
+            position_store=position_store,
         )
         while True:
             cycle_at = utc_now()
-            results = runtime.cycle(now=cycle_at)
+            try:
+                results = runtime.cycle(now=cycle_at)
+            except Exception as exc:
+                if auto_demo:
+                    _engage_kill_switch(
+                        kill_switch=kill_switch,
+                        broker=guarded,
+                        now=cycle_at,
+                        reason=f"runtime exception: {type(exc).__name__}",
+                    )
+                raise
             _print_cycle(results, now=cycle_at)
-            if auto_demo and _engage_on_uncertain(
-                results,
-                kill_switch=kill_switch,
-                broker=guarded,
-                now=cycle_at,
-            ):
-                raise RuntimeError("runtime stopped fail-closed after unsafe broker/runtime state")
+            if auto_demo:
+                _engage_on_uncertain(
+                    results,
+                    kill_switch=kill_switch,
+                    broker=guarded,
+                    now=cycle_at,
+                )
             if args.once:
                 break
             sleep(float(live_config.poll_seconds))
