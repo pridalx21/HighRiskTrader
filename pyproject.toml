@@ -26,6 +26,7 @@ ui = ["plotly>=5.24,<7", "streamlit>=1.40,<2"]
 catalyst-demo = "catalyst.demo:main"
 catalyst-kill-switch = "catalyst.kill_switch_cli:main"
 catalyst-mt5-shadow-smoke = "catalyst.mt5_shadow_smoke:main"
+catalyst-run = "catalyst.run:main"
 catalyst-validate = "catalyst.validation_cli:main"
 
 [tool.setuptools.packages.find]
@@ -43,11 +44,13 @@ source = ["catalyst"]
 # the aggregate 85% gate measures deterministic executable and validation logic.
 omit = [
   "src/catalyst/adapters/mt5_broker.py",
+  "src/catalyst/adapters/mt5_exit.py",
   "src/catalyst/adapters/mt5_observability.py",
   "src/catalyst/dashboard.py",
   "src/catalyst/demo.py",
   "src/catalyst/kill_switch_cli.py",
   "src/catalyst/mt5_shadow_smoke.py",
+  "src/catalyst/run.py",
   "src/catalyst/replay_demo.py",
   "src/catalyst/validation_cli.py",
 ]

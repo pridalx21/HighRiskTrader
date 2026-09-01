@@ -16,6 +16,7 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
+      - run: catalyst-run --help
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy src

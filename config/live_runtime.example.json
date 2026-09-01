@@ -1,0 +1,19 @@
+{
+  "poll_seconds": "1",
+  "bar_seconds": 60,
+  "session_cutoff_minutes": 120,
+  "primaries": {
+    "US100": {
+      "related": [
+        {"symbol": "US500", "polarity": 1, "minimum_move": "1.0"},
+        {"symbol": "USDJPY", "polarity": 1, "minimum_move": "0.01"}
+      ]
+    },
+    "US500": {
+      "related": [
+        {"symbol": "US100", "polarity": 1, "minimum_move": "5.0"},
+        {"symbol": "USDJPY", "polarity": 1, "minimum_move": "0.01"}
+      ]
+    }
+  }
+}
