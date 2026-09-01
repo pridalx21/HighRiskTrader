@@ -5,14 +5,19 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 from catalyst.adapters.guarded_demo_broker import GuardedDemoBroker
+from catalyst.config import RuntimeConfig
 from catalyst.controls import LocalKillSwitch
 from catalyst.domain.enums import AccountMode, EventImportance, EventStatus
 from catalyst.domain.models import AccountSnapshot, BrokerContract, EconomicEvent
 from catalyst.ports.broker import OrderReceipt
 from catalyst.ports.reconciliation import BrokerOrderLookup, BrokerOrderState
 from catalyst.replay.models import CrossAssetRule, RawBar, RawTick
-from catalyst.runtime import CatalystRuntime, LivePrimaryRules, LiveRuntimeConfig, load_live_runtime_config
-
+from catalyst.runtime import (
+    CatalystRuntime,
+    LivePrimaryRules,
+    LiveRuntimeConfig,
+    load_live_runtime_config,
+)
 
 NOW = datetime(2030, 1, 10, 13, 32, 10, tzinfo=UTC)
 EVENT_AT = datetime(2030, 1, 10, 13, 30, tzinfo=UTC)
@@ -64,6 +69,16 @@ def contract() -> BrokerContract:
         commission_per_volume=Decimal("0.01"),
         slippage_ticks=Decimal("1"),
     )
+
+
+def tick(
+    symbol: str,
+    at: datetime,
+    bid: str,
+    ask: str,
+    sequence: int,
+) -> RawTick:
+    return RawTick(symbol, at, Decimal(bid), Decimal(ask), sequence)
 
 
 class FakeJournal:
@@ -126,20 +141,50 @@ class FakeMarketData:
         self.fail = fail
         self.ticks = {
             "PRIMARY": (
-                RawTick("PRIMARY", EVENT_AT - timedelta(minutes=30), Decimal("99.8"), Decimal("100.0"), 1),
-                RawTick("PRIMARY", EVENT_AT - timedelta(minutes=20), Decimal("95.0"), Decimal("95.2"), 2),
-                RawTick("PRIMARY", EVENT_AT - timedelta(minutes=10), Decimal("97.9"), Decimal("98.1"), 3),
-                RawTick("PRIMARY", EVENT_AT + timedelta(seconds=90), Decimal("100.2"), Decimal("100.4"), 4),
-                RawTick("PRIMARY", EVENT_AT + timedelta(minutes=2), Decimal("100.0"), Decimal("100.2"), 5),
-                RawTick("PRIMARY", NOW - timedelta(seconds=1), Decimal("101.2"), Decimal("101.4"), 6),
+                tick(
+                    "PRIMARY",
+                    EVENT_AT - timedelta(minutes=30),
+                    "99.8",
+                    "100.0",
+                    1,
+                ),
+                tick(
+                    "PRIMARY",
+                    EVENT_AT - timedelta(minutes=20),
+                    "95.0",
+                    "95.2",
+                    2,
+                ),
+                tick(
+                    "PRIMARY",
+                    EVENT_AT - timedelta(minutes=10),
+                    "97.9",
+                    "98.1",
+                    3,
+                ),
+                tick(
+                    "PRIMARY",
+                    EVENT_AT + timedelta(seconds=90),
+                    "100.2",
+                    "100.4",
+                    4,
+                ),
+                tick(
+                    "PRIMARY",
+                    EVENT_AT + timedelta(minutes=2),
+                    "100.0",
+                    "100.2",
+                    5,
+                ),
+                tick("PRIMARY", NOW - timedelta(seconds=1), "101.2", "101.4", 6),
             ),
             "R1": (
-                RawTick("R1", EVENT_AT - timedelta(minutes=10), Decimal("49.9"), Decimal("50.1"), 1),
-                RawTick("R1", NOW - timedelta(seconds=1), Decimal("50.9"), Decimal("51.1"), 2),
+                tick("R1", EVENT_AT - timedelta(minutes=10), "49.9", "50.1", 1),
+                tick("R1", NOW - timedelta(seconds=1), "50.9", "51.1", 2),
             ),
             "R2": (
-                RawTick("R2", EVENT_AT - timedelta(minutes=10), Decimal("69.9"), Decimal("70.1"), 1),
-                RawTick("R2", NOW - timedelta(seconds=1), Decimal("70.9"), Decimal("71.1"), 2),
+                tick("R2", EVENT_AT - timedelta(minutes=10), "69.9", "70.1", 1),
+                tick("R2", NOW - timedelta(seconds=1), "70.9", "71.1", 2),
             ),
         }
         self.bar = RawBar(
@@ -160,13 +205,13 @@ class FakeMarketData:
     def ticks_between(self, symbol, start, end):
         if self.fail:
             raise RuntimeError("market data unavailable")
-        return tuple(tick for tick in self.ticks[symbol] if start <= tick.timestamp <= end)
+        return tuple(tick_ for tick_ in self.ticks[symbol] if start <= tick_.timestamp <= end)
 
     def latest_tick(self, symbol, *, at, maximum_age):
-        tick = self.ticks[symbol][-1]
-        if at - tick.timestamp > maximum_age:
+        latest = self.ticks[symbol][-1]
+        if at - latest.timestamp > maximum_age:
             raise RuntimeError("stale")
-        return tick
+        return latest
 
     def bars_between(self, symbol, start, end, *, timeframe_seconds):
         return (self.bar,)
@@ -212,7 +257,7 @@ class RuntimeTests(TestCase):
             )
             journal = FakeJournal()
             runtime = CatalystRuntime(
-                config=__import__("catalyst.config", fromlist=["RuntimeConfig"]).RuntimeConfig(),
+                config=RuntimeConfig(),
                 live_config=live_config(),
                 journal=journal,
                 broker=broker,
@@ -239,7 +284,7 @@ class RuntimeTests(TestCase):
             )
             journal = FakeJournal()
             runtime = CatalystRuntime(
-                config=__import__("catalyst.config", fromlist=["RuntimeConfig"]).RuntimeConfig(),
+                config=RuntimeConfig(),
                 live_config=live_config(),
                 journal=journal,
                 broker=broker,
@@ -256,7 +301,7 @@ class RuntimeTests(TestCase):
     def test_events_are_limited_to_runtime_window(self) -> None:
         with TemporaryDirectory() as directory:
             runtime = CatalystRuntime(
-                config=__import__("catalyst.config", fromlist=["RuntimeConfig"]).RuntimeConfig(),
+                config=RuntimeConfig(),
                 live_config=live_config(),
                 journal=FakeJournal(),
                 broker=GuardedDemoBroker(
