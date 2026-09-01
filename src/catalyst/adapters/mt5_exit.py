@@ -182,5 +182,5 @@ class MT5ExitAdapter:
 
     @staticmethod
     def _exit_comment(position_id: str, reason: str) -> str:
-        token = sha256(f"{position_id}:{reason}".encode("utf-8")).hexdigest()[:12]
+        token = sha256(f"{position_id}:{reason}".encode()).hexdigest()[:12]
         return f"CAT-X-{token}"
