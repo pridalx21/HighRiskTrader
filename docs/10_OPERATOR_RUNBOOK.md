@@ -4,151 +4,239 @@
 
 CATALYST MVP is demo-only. Do not modify the adapter to accept real or unknown
 account modes. Do not place passwords, terminal profiles, `.env` files, journal
-databases, or broker logs in Git.
+databases, control tokens, or broker logs in Git.
 
-The persistent kill-switch path should live outside tracked source, for example:
+The persistent runtime files should live outside tracked source, normally under
+`.runtime/`:
 
 ```text
 .runtime/kill-switch.json
+.runtime/risk-state.json
+.runtime/managed-positions.json
+.runtime/events.csv
+.runtime/live_runtime.json
+.runtime/settings.demo.toml
 ```
 
-The execution composition must wrap the verified MT5 adapter with
-`GuardedDemoBroker` and use that guarded instance for `DurableDemoExecutor`.
+The entry execution composition wraps the verified MT5 adapter with
+`GuardedDemoBroker` and uses that guarded instance for `DurableDemoExecutor`.
+Reduce-risk exits are handled separately by `MT5ExitAdapter` so disarming or
+engaging the kill switch blocks new risk without blocking a required exit.
 
 ## Installation
-
-Core development and validation:
-
-```bash
-python -m pip install -e ".[dev]"
-```
-
-Windows MT5 + local dashboard dependencies:
 
 ```bash
 python -m pip install -e ".[dev,mt5,ui]"
 ```
 
+Verify the packaged runner:
+
+```bash
+catalyst-run --help
+```
+
 ## Configure the real demo terminal locally
 
-Provide environment values locally. Do not paste the password into chat or
-commit it. The terminal should already have the demo credentials stored through
-its normal local profile/login flow.
+The terminal should already have the demo credentials stored through its normal
+local profile/login flow. CATALYST does not need the password in an environment
+variable.
 
 ```text
 CATALYST_MT5_TERMINAL_PATH=<absolute path to terminal64.exe>
 CATALYST_MT5_LOGIN=<demo login id>
 CATALYST_MT5_SERVER=<exact demo server>
-CATALYST_MT5_SYMBOL_MAPPING_JSON={"US100":"<broker symbol>"}
-CATALYST_MT5_ECONOMICS_JSON={"US100":{"commission_per_volume":"...","slippage_ticks":"...","profit_to_account_rate":"..."}}
+CATALYST_MT5_SYMBOL_MAPPING_JSON={"US100":"<broker symbol>",...}
+CATALYST_MT5_ECONOMICS_JSON={"US100":{"commission_per_volume":"...","slippage_ticks":"...","profit_to_account_rate":"..."},...}
+CATALYST_CONFIG_PATH=.runtime/settings.shadow.toml
+CATALYST_LIVE_CONFIG=.runtime/live_runtime.json
+CATALYST_EVENT_CSV=.runtime/events.csv
 ```
 
-Every configured logical symbol must appear in both JSON objects. Economics are
-explicit because commission/slippage/conversion assumptions must not be guessed.
+Every primary and related logical symbol must appear in the mapping/economics
+objects. Commission, slippage, and conversion assumptions must not be guessed.
 
-## First real-terminal check: shadow only
-
-Run:
+## First real-terminal check: shadow smoke
 
 ```bash
 catalyst-mt5-shadow-smoke
 ```
 
-The command verifies the configured terminal, login, server, explicit demo mode,
-contract metadata, latest ticks, positions, and pending orders. It has automatic
-execution disabled and does not call order submission. Success ends with:
+Success ends with:
 
 ```text
 mt5_shadow_smoke=pass orders_sent=0
 ```
 
-If it fails, keep the system disarmed. Correct mapping/economics/account state
-before proceeding.
+If it fails, keep the system disarmed.
 
-## Startup sequence
+## Full runner preflight
 
-1. Confirm the persistent kill-switch latch state.
-2. Load and validate the normal strategy/risk configuration.
-3. Open `SQLiteJournal` and acquire the single-instance lock.
-4. Create the MT5 demo adapter with explicit mapping/economics.
-5. Wrap it in `GuardedDemoBroker` using the same persistent latch path.
-6. Connect and positively verify demo mode, login, server, and connectivity.
-7. Run restart reconciliation for every unresolved durable order intent.
-8. Load the strict UTC event CSV and warm required market evidence.
-9. Build the read-only dashboard snapshot from stored/observed state.
-10. Start disarmed. Automatic demo execution requires an authenticated,
-    confirmed control request against fresh state.
+```bash
+catalyst-run --preflight-only
+```
 
-Do not arm if reconciliation is unresolved, the journal is unhealthy, market
-state is stale, account mode is not positively demo, or the kill switch is
-active.
+Preflight imports the strict event CSV into the journal, verifies the exact demo
+account/login/server, creates the account snapshot, and runs restart
+reconciliation. Any unresolved durable intent blocks normal startup.
 
-## Arm / disarm
+## Continuous shadow mode
 
-Arming flows only through `OperatorControlPlane.ARM_AUTO_DEMO`. It requires:
+```bash
+catalyst-run
+```
 
-- matching local authentication token digest;
-- explicit operator confirmation;
-- fresh dashboard source timestamp;
-- healthy audit journal;
-- clear persistent kill switch;
-- broker adapter's positive demo verification.
+Shadow mode uses live MT5 bid/ask data and the same deterministic feature and
+decision pipeline as replay while the broker remains physically disarmed. It
+never calls entry or exit order submission.
 
-Disarm through `DISARM_AUTO_DEMO`. After restart, arming is never restored
-automatically.
+One cycle only:
+
+```bash
+catalyst-run --once
+```
+
+## Auto-demo mode
+
+Auto-demo is intentionally multi-factor. The local TOML must contain:
+
+```toml
+[system]
+demo_only = true
+auto_demo_armed = true
+```
+
+The strict MVP execution section stays:
+
+```toml
+[execution]
+mode = "shadow"
+require_initial_stop = true
+blind_order_retry = false
+maximum_submit_attempts = 1
+```
+
+Then set local arming factors:
+
+```text
+CATALYST_AUTO_DEMO_CONFIRM=DEMO_ONLY
+CATALYST_CONTROL_TOKEN=<local random token>
+```
+
+Start:
+
+```bash
+catalyst-run --auto-demo
+```
+
+Arming flows through `OperatorControlPlane.ARM_AUTO_DEMO` and still requires a
+healthy journal, clear kill switch, fresh control state, positive MT5 demo
+verification, and all normal strategy/risk gates. Restart never silently
+restores an armed process.
+
+## Entry lifecycle
+
+For a green auto-demo trade plan:
+
+1. persist the complete decision;
+2. persist managed-position exit metadata;
+3. reserve the durable idempotency key;
+4. positively recheck demo mode/connectivity;
+5. transition the intent to submitting;
+6. call the broker exactly once;
+7. include the mandatory server-side initial stop in the entry request;
+8. persist acknowledgement/rejection/uncertain state.
+
+A timeout or ambiguous result becomes uncertain. Do not retry it. Reconcile on
+restart against MT5 orders/history.
+
+## Managed intraday exits
+
+`MT5ExitAdapter` recognizes only positions matching both this CATALYST magic
+number and a deterministic `CAT-...` comment. Manual/unrelated positions are not
+managed.
+
+The runtime evaluates CATALYST positions before new entries on each auto-demo
+cycle. Existing `IntradayExitEngine` rules cover:
+
+- emergency exit if the protective stop is missing;
+- protective-stop condition;
+- full pre-event-range reclaim;
+- configured session cutoff.
+
+Exit requests reference the exact MT5 position ticket and send one opposite
+market deal at the executable side. They do **not** require the entry arm latch,
+because disarm/kill-switch must block adding risk without blocking risk
+reduction.
+
+Managed exit metadata is persisted at:
+
+```text
+.runtime/managed-positions.json
+```
+
+Do not edit/delete this file while a CATALYST position is open. If a tagged
+CATALYST position is found without valid metadata, the runtime takes the
+conservative reduce-risk close path rather than inventing an exit policy.
+
+An ambiguous exit result is never blindly retried. A confirmed broker
+acknowledgement is followed by a fresh positions read; if the same ticket still
+exists, the runtime fails closed.
 
 ## Emergency kill switch
-
-The fastest independent safety action is:
 
 ```bash
 catalyst-kill-switch --path .runtime/kill-switch.json --reason "operator stop"
 ```
 
-This only engages the latch. It cannot clear it. Because `GuardedDemoBroker`
-checks the latch directly, new submissions remain blocked even if the dashboard
-or normal disarm call is unavailable.
+The latch blocks all new guarded entry submissions. Auto-demo may continue only
+the reduce-risk management of already-open CATALYST positions. Do not manually
+clear the latch during an unresolved incident.
 
-After an incident, investigate broker state and journal state first. Clear the
-latch only through authenticated `ACKNOWLEDGE_INCIDENT`, while execution is
-disarmed and the audit journal is healthy. A failed audit of the clear action
+Clear only through authenticated `ACKNOWLEDGE_INCIDENT` while execution is
+disarmed and the audit journal is healthy. A failed audit of the clear operation
 re-latches automatically.
 
 ## Disconnect / timeout / unknown order result
 
-- Disarm immediately on disconnect or unreadable account state.
-- Reconnect with bounded retries, then re-verify demo account/login/server.
-- A send timeout or ambiguous result is `UNCERTAIN`.
-- Never re-submit an uncertain intent.
-- Run `RestartReconciler` against open orders and history.
-- `NOT_FOUND`, `UNKNOWN`, or adapter errors remain disarmed for manual review.
+- Disarm on disconnect or unreadable account state.
+- Reconnect with bounded retries and then re-verify demo account/login/server.
+- Entry timeout/ambiguous result is `UNCERTAIN` and is never resubmitted.
+- Restart reconciliation checks open orders and history.
+- Unresolved reconciliation remains disarmed.
+- Exit ambiguity also stops blind retries and requires broker-state inspection.
+
+## Event and live-rule maintenance
+
+The runner currently consumes strict local event CSV data; it does not download
+the economic calendar automatically. Keep `.runtime/events.csv` current with
+explicit UTC timestamps.
+
+`live_runtime.json` supplies primary/related market rules and the intraday
+session cutoff. Checked-in values are examples, not validated trading
+parameters. Freeze and version any rule set used for meaningful validation.
 
 ## Shutdown
 
-1. Disarm automatic demo execution.
-2. Persist final heartbeat/state.
-3. Reconcile managed demo orders/positions.
-4. Apply the existing intraday close policy to any managed position.
-5. Disconnect MT5 cleanly.
-6. Close the journal and release its single-instance lock.
-7. Leave the persistent kill switch engaged if shutdown was caused by an
-   incident or unresolved broker state.
+Normal operator shutdown is `Ctrl+C`. The runner then disarms, disconnects MT5,
+closes the SQLite journal, and releases its lock.
+
+Before shutting down the computer/terminal with managed positions open, confirm
+that the runner has not been interrupted before its required intraday exit. If
+broker state is ambiguous, engage the kill switch and investigate rather than
+resending orders.
 
 ## Validation evidence pack
-
-Run the frozen harness with real historical/demo observations:
 
 ```bash
 catalyst-validate observations.json validation-output --strategy-version <frozen-version>
 ```
 
-Review both `validation_report.json` and `validation_report.md`. The manifest
-contains input/report hashes. `CONTINUE` is a research promotion gate only; it
-does not enable real-money trading.
+Review `validation_report.json` and `validation_report.md`. `CONTINUE` is a
+research/demo promotion gate only; it does not enable real-money trading.
 
 ## Incident export
 
 For a specific event, export the canonical event audit bundle from
-`SQLiteJournal.export_event_audit_bundle`. Preserve the journal and source event
-file before attempting repairs. Do not delete the lock file while another
-CATALYST process may still be active.
+`SQLiteJournal.export_event_audit_bundle`. Preserve the journal, event file,
+runtime position-state file, and relevant MT5 records before attempting repairs.
+Do not delete the lock file while another CATALYST process may still be active.
