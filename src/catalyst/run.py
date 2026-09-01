@@ -70,14 +70,10 @@ class RuntimeRiskTracker:
         stored_month = stored.get("month")
         try:
             day_start = (
-                Decimal(str(stored["day_start_equity"]))
-                if stored_day == day_key
-                else equity
+                Decimal(str(stored["day_start_equity"])) if stored_day == day_key else equity
             )
             month_start = (
-                Decimal(str(stored["month_start_equity"]))
-                if stored_month == month_key
-                else equity
+                Decimal(str(stored["month_start_equity"])) if stored_month == month_key else equity
             )
         except (KeyError, ValueError):
             day_start = equity
@@ -125,9 +121,7 @@ class RuntimeRiskTracker:
 
 
 def _argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Run CATALYST against a verified MT5 demo account"
-    )
+    parser = argparse.ArgumentParser(description="Run CATALYST against a verified MT5 demo account")
     parser.add_argument(
         "--config",
         default=os.environ.get("CATALYST_CONFIG_PATH", "config/settings.example.toml"),
@@ -175,9 +169,7 @@ def _validate_auto_demo(config: RuntimeConfig) -> str:
         )
     confirmation = _required_environment("CATALYST_AUTO_DEMO_CONFIRM")
     if confirmation != AUTO_DEMO_CONFIRMATION:
-        raise RuntimeError(
-            f"CATALYST_AUTO_DEMO_CONFIRM must equal {AUTO_DEMO_CONFIRMATION!r}"
-        )
+        raise RuntimeError(f"CATALYST_AUTO_DEMO_CONFIRM must equal {AUTO_DEMO_CONFIRMATION!r}")
     return _required_environment("CATALYST_CONTROL_TOKEN")
 
 
@@ -196,9 +188,7 @@ def _print_cycle(results: tuple[Any, ...], *, now: datetime) -> None:
         submission = result.submission
         suffix = ""
         if submission is not None:
-            suffix = (
-                f" submit_code={submission.code} accepted={str(submission.accepted).lower()}"
-            )
+            suffix = f" submit_code={submission.code} accepted={str(submission.accepted).lower()}"
         print(
             f"{now.isoformat()} event={result.event_id} symbol={result.symbol} "
             f"state={result.decision.state.value} code={result.decision.code}{suffix}"
@@ -290,9 +280,7 @@ def main() -> None:
                 reason="catalyst-run explicit demo-auto startup",
             )
             if not arm_result.accepted:
-                raise RuntimeError(
-                    f"demo-auto arm failed: {arm_result.code}: {arm_result.message}"
-                )
+                raise RuntimeError(f"demo-auto arm failed: {arm_result.code}: {arm_result.message}")
             print("runtime_mode=demo_auto armed=true")
         else:
             print("runtime_mode=shadow armed=false orders_sent=0")
