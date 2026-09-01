@@ -44,6 +44,7 @@ source = ["catalyst"]
 # the aggregate 85% gate measures deterministic executable and validation logic.
 omit = [
   "src/catalyst/adapters/mt5_broker.py",
+  "src/catalyst/adapters/mt5_exit.py",
   "src/catalyst/adapters/mt5_observability.py",
   "src/catalyst/dashboard.py",
   "src/catalyst/demo.py",
