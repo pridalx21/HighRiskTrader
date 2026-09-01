@@ -30,7 +30,12 @@ from catalyst.engine.durable_execution import DurableDemoExecutor, DurableSubmis
 from catalyst.engine.exit_engine import ExitQuote, IntradayExitEngine, ManagedPosition
 from catalyst.engine.pipeline import DecisionPipeline
 from catalyst.replay.features import FeatureBuildResult, MarketFeatureBuilder
-from catalyst.replay.models import CrossAssetRule, ExecutionScenario, FeatureEvidence, ReplayScenario
+from catalyst.replay.models import (
+    CrossAssetRule,
+    ExecutionScenario,
+    FeatureEvidence,
+    ReplayScenario,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,7 +344,9 @@ class CatalystRuntime:
         position_store: PositionStateStore | None = None,
     ) -> None:
         if auto_demo and (exit_adapter is None or position_store is None):
-            raise ValueError("demo-auto runtime requires exit adapter and persistent position state")
+            raise ValueError(
+                "demo-auto runtime requires exit adapter and persistent position state"
+            )
         self.config = config
         self.live_config = live_config
         self.journal = journal
