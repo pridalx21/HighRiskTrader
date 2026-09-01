@@ -14,20 +14,23 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from json import JSONDecodeError, load
+from json import JSONDecodeError, load, loads
 from pathlib import Path
 from typing import Any
 
 from catalyst.adapters.guarded_demo_broker import GuardedDemoBroker
+from catalyst.adapters.mt5_exit import MT5ExitAdapter
 from catalyst.adapters.mt5_observability import MT5ReadAdapter
 from catalyst.adapters.sqlite_journal import JournalConflictError, SQLiteJournal
 from catalyst.config import RuntimeConfig
-from catalyst.domain.enums import EventImportance, EventStatus
+from catalyst.domain.enums import Direction, EventImportance, EventStatus
 from catalyst.domain.models import EconomicEvent, PipelineDecision, TradePlan
+from catalyst.domain.serialization import canonical_json
 from catalyst.engine.durable_execution import DurableDemoExecutor, DurableSubmissionResult
+from catalyst.engine.exit_engine import ExitQuote, IntradayExitEngine, ManagedPosition
 from catalyst.engine.pipeline import DecisionPipeline
 from catalyst.replay.features import FeatureBuildResult, MarketFeatureBuilder
-from catalyst.replay.models import CrossAssetRule, ExecutionScenario, ReplayScenario
+from catalyst.replay.models import CrossAssetRule, ExecutionScenario, FeatureEvidence, ReplayScenario
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +142,178 @@ def load_live_runtime_config(path: str | Path) -> LiveRuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedPositionSpec:
+    decision_id: str
+    event_id: str
+    symbol: str
+    direction: Direction
+    entry: Decimal
+    initial_stop: Decimal
+    quantity: Decimal
+    opened_at: datetime
+    pre_event_high: Decimal
+    pre_event_low: Decimal
+    session_cutoff: datetime
+    comment: str
+
+    def __post_init__(self) -> None:
+        if not all(
+            value.strip()
+            for value in (self.decision_id, self.event_id, self.symbol, self.comment)
+        ):
+            raise ValueError("managed position spec identifiers must not be empty")
+        if not self.comment.startswith("CAT-"):
+            raise ValueError("managed position spec requires a CATALYST comment")
+        for field_name in (
+            "entry",
+            "initial_stop",
+            "quantity",
+            "pre_event_high",
+            "pre_event_low",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, Decimal) or not value.is_finite() or value <= 0:
+                raise ValueError(f"{field_name} must be a positive finite Decimal")
+        for value, field_name in (
+            (self.opened_at, "opened_at"),
+            (self.session_cutoff, "session_cutoff"),
+        ):
+            if value.tzinfo is None or value.utcoffset() != timedelta(0):
+                raise ValueError(f"{field_name} must be timezone-aware UTC")
+        if self.session_cutoff <= self.opened_at:
+            raise ValueError("managed position cutoff must follow opening")
+        if self.pre_event_high <= self.pre_event_low:
+            raise ValueError("managed position pre-event range is invalid")
+
+
+class PositionStateStore:
+    """Small derived restart cache for intraday exit metadata; never stores credentials."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self._records: dict[str, ManagedPositionSpec] = {}
+        self._load()
+
+    def get(self, comment: str) -> ManagedPositionSpec | None:
+        return self._records.get(comment)
+
+    def record(
+        self,
+        plan: TradePlan,
+        evidence: FeatureEvidence,
+        *,
+        session_cutoff: datetime,
+        comment: str,
+    ) -> None:
+        spec = ManagedPositionSpec(
+            decision_id=plan.decision_id,
+            event_id=plan.event_id,
+            symbol=plan.symbol,
+            direction=plan.direction,
+            entry=plan.entry,
+            initial_stop=plan.stop,
+            quantity=plan.quantity,
+            opened_at=plan.created_at,
+            pre_event_high=evidence.pre_event_high,
+            pre_event_low=evidence.pre_event_low,
+            session_cutoff=session_cutoff,
+            comment=comment,
+        )
+        self._records[comment] = spec
+        self._write()
+
+    def discard(self, comment: str) -> None:
+        if self._records.pop(comment, None) is not None:
+            self._write()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            return
+        try:
+            raw = loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("managed position state is unreadable") from exc
+        if not isinstance(raw, dict) or set(raw) != {"schema_version", "positions"}:
+            raise RuntimeError("managed position state has an invalid root schema")
+        if raw["schema_version"] != "catalyst.position-state.v1":
+            raise RuntimeError("managed position state schema version is unsupported")
+        positions = raw["positions"]
+        if not isinstance(positions, list):
+            raise RuntimeError("managed position state positions must be an array")
+        for item in positions:
+            spec = self._spec_from_value(item)
+            if spec.comment in self._records:
+                raise RuntimeError("managed position state contains a duplicate comment")
+            self._records[spec.comment] = spec
+
+    @staticmethod
+    def _spec_from_value(value: Any) -> ManagedPositionSpec:
+        expected = {
+            "comment",
+            "decision_id",
+            "direction",
+            "entry",
+            "event_id",
+            "initial_stop",
+            "opened_at",
+            "pre_event_high",
+            "pre_event_low",
+            "quantity",
+            "session_cutoff",
+            "symbol",
+        }
+        if not isinstance(value, dict) or set(value) != expected:
+            raise RuntimeError("managed position record has an invalid schema")
+        try:
+            opened_at = datetime.fromisoformat(str(value["opened_at"]).replace("Z", "+00:00"))
+            session_cutoff = datetime.fromisoformat(
+                str(value["session_cutoff"]).replace("Z", "+00:00")
+            )
+            return ManagedPositionSpec(
+                decision_id=str(value["decision_id"]),
+                event_id=str(value["event_id"]),
+                symbol=str(value["symbol"]),
+                direction=Direction(str(value["direction"])),
+                entry=Decimal(str(value["entry"])),
+                initial_stop=Decimal(str(value["initial_stop"])),
+                quantity=Decimal(str(value["quantity"])),
+                opened_at=opened_at,
+                pre_event_high=Decimal(str(value["pre_event_high"])),
+                pre_event_low=Decimal(str(value["pre_event_low"])),
+                session_cutoff=session_cutoff,
+                comment=str(value["comment"]),
+            )
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise RuntimeError("managed position record is invalid") from exc
+
+    def _write(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": "catalyst.position-state.v1",
+            "positions": [
+                {
+                    "comment": spec.comment,
+                    "decision_id": spec.decision_id,
+                    "direction": spec.direction,
+                    "entry": spec.entry,
+                    "event_id": spec.event_id,
+                    "initial_stop": spec.initial_stop,
+                    "opened_at": spec.opened_at,
+                    "pre_event_high": spec.pre_event_high,
+                    "pre_event_low": spec.pre_event_low,
+                    "quantity": spec.quantity,
+                    "session_cutoff": spec.session_cutoff,
+                    "symbol": spec.symbol,
+                }
+                for spec in sorted(self._records.values(), key=lambda item: item.comment)
+            ],
+        }
+        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        temporary.write_text(canonical_json(payload), encoding="utf-8")
+        temporary.replace(self.path)
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeCycleResult:
     event_id: str
     symbol: str
@@ -160,7 +335,11 @@ class CatalystRuntime:
         market_data: MT5ReadAdapter,
         events: tuple[EconomicEvent, ...],
         auto_demo: bool,
+        exit_adapter: MT5ExitAdapter | None = None,
+        position_store: PositionStateStore | None = None,
     ) -> None:
+        if auto_demo and (exit_adapter is None or position_store is None):
+            raise ValueError("demo-auto runtime requires exit adapter and persistent position state")
         self.config = config
         self.live_config = live_config
         self.journal = journal
@@ -168,9 +347,12 @@ class CatalystRuntime:
         self.market_data = market_data
         self.events = tuple(sorted(events, key=lambda item: (item.scheduled_at, item.event_id)))
         self.auto_demo = auto_demo
+        self.exit_adapter = exit_adapter
+        self.position_store = position_store
         self.pipeline = DecisionPipeline(config)
         self.features = MarketFeatureBuilder(config)
         self.executor = DurableDemoExecutor(journal)
+        self.exit_engine = IntradayExitEngine()
         self._reported: set[tuple[str, str, str]] = set()
 
     def active_events(self, now: datetime) -> tuple[EconomicEvent, ...]:
@@ -187,6 +369,8 @@ class CatalystRuntime:
 
     def cycle(self, *, now: datetime) -> tuple[RuntimeCycleResult, ...]:
         self._require_utc(now)
+        if self.auto_demo:
+            self._manage_open_positions(now)
         results: list[RuntimeCycleResult] = []
         for event in self.active_events(now):
             if now < event.scheduled_at + self.config.state_machine.shock_window:
@@ -215,7 +399,7 @@ class CatalystRuntime:
                         contract=contract,
                         auto_demo_armed=self.broker.armed if self.auto_demo else True,
                     )
-                    submission = self._handle_decision(event, decision, now)
+                    submission = self._handle_decision(event, decision, feature, now)
                     results.append(RuntimeCycleResult(event.event_id, symbol, decision, submission))
                 except Exception as exc:
                     if self.auto_demo:
@@ -313,6 +497,7 @@ class CatalystRuntime:
         self,
         event: EconomicEvent,
         decision: PipelineDecision,
+        feature: FeatureBuildResult,
         now: datetime,
     ) -> DurableSubmissionResult | None:
         code = str(decision.code)
@@ -338,10 +523,110 @@ class CatalystRuntime:
             return None
         if not self.broker.armed:
             raise RuntimeError("demo-auto runtime reached a plan while broker is disarmed")
+        assert self.exit_adapter is not None
+        assert self.position_store is not None
+        comment = self.exit_adapter.decision_comment(plan.decision_id)
+        self.position_store.record(
+            plan,
+            feature.evidence,
+            session_cutoff=event.scheduled_at
+            + timedelta(minutes=self.live_config.session_cutoff_minutes),
+            comment=comment,
+        )
         result = self.executor.submit_once(plan, self.broker, occurred_at=now)
         if result.requires_reconciliation:
             self.broker.disarm()
+        elif not result.accepted:
+            self.position_store.discard(comment)
         return result
+
+    def _manage_open_positions(self, now: datetime) -> None:
+        assert self.exit_adapter is not None
+        assert self.position_store is not None
+        positions = self.exit_adapter.managed_positions()
+        for position in positions:
+            spec = self.position_store.get(position.comment)
+            if spec is None:
+                self._close_managed_position(
+                    position,
+                    reason="untracked_managed_position",
+                    now=now,
+                )
+                continue
+            if (
+                spec.symbol != position.logical_symbol
+                or spec.direction is not position.direction
+                or spec.comment != position.comment
+            ):
+                self._close_managed_position(
+                    position,
+                    reason="managed_position_identity_mismatch",
+                    now=now,
+                )
+                continue
+            tick = self.market_data.latest_tick(
+                position.logical_symbol,
+                at=now,
+                maximum_age=timedelta(
+                    seconds=float(self.config.strategy.maximum_data_age_seconds)
+                ),
+            )
+            managed = ManagedPosition(
+                symbol=position.logical_symbol,
+                direction=position.direction,
+                entry=position.price_open,
+                initial_stop=spec.initial_stop,
+                current_stop=position.stop or spec.initial_stop,
+                quantity=position.volume,
+                opened_at=spec.opened_at,
+                pre_event_high=spec.pre_event_high,
+                pre_event_low=spec.pre_event_low,
+                session_cutoff=spec.session_cutoff,
+            )
+            decision = self.exit_engine.evaluate(
+                managed,
+                ExitQuote(
+                    symbol=tick.symbol,
+                    timestamp=tick.timestamp,
+                    bid=tick.bid,
+                    ask=tick.ask,
+                ),
+                now,
+                maximum_data_age_seconds=self.config.strategy.maximum_data_age_seconds,
+                emergency=position.stop is None,
+            )
+            if decision.should_exit:
+                self._close_managed_position(
+                    position,
+                    reason=decision.reason.value,
+                    now=now,
+                )
+
+    def _close_managed_position(self, position: Any, *, reason: str, now: datetime) -> None:
+        assert self.exit_adapter is not None
+        assert self.position_store is not None
+        receipt = self.exit_adapter.close_position(position, reason=reason)
+        self._heartbeat(
+            now=now,
+            status="position_exit",
+            details={
+                "accepted": receipt.accepted,
+                "broker_order_id": receipt.broker_order_id,
+                "code": receipt.code,
+                "position_id": position.broker_position_id,
+                "reason": reason,
+                "symbol": position.logical_symbol,
+            },
+        )
+        if not receipt.accepted:
+            raise RuntimeError(f"managed position exit was rejected: {receipt.code}")
+        still_open = any(
+            item.broker_position_id == position.broker_position_id
+            for item in self.exit_adapter.managed_positions()
+        )
+        if still_open:
+            raise RuntimeError("managed position remains open after acknowledged exit")
+        self.position_store.discard(position.comment)
 
     def _record_plan_decision(
         self,
