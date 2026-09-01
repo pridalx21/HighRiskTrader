@@ -54,7 +54,8 @@ class RuntimeRiskTracker:
     read: MT5ReadAdapter | None = None
 
     def initialize(self, *, equity: Decimal, now: datetime) -> None:
-        if now.tzinfo is None or now.utcoffset() is None or now.utcoffset().total_seconds() != 0:
+        offset = now.utcoffset()
+        if now.tzinfo is None or offset is None or offset.total_seconds() != 0:
             raise ValueError("risk tracker initialization requires UTC")
         day_key = now.date().isoformat()
         month_key = f"{now.year:04d}-{now.month:02d}"
