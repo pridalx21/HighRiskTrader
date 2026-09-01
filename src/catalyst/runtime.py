@@ -163,8 +163,7 @@ class ManagedPositionSpec:
 
     def __post_init__(self) -> None:
         if not all(
-            value.strip()
-            for value in (self.decision_id, self.event_id, self.symbol, self.comment)
+            value.strip() for value in (self.decision_id, self.event_id, self.symbol, self.comment)
         ):
             raise ValueError("managed position spec identifiers must not be empty")
         if not self.comment.startswith("CAT-"):
@@ -574,9 +573,7 @@ class CatalystRuntime:
             tick = self.market_data.latest_tick(
                 position.logical_symbol,
                 at=now,
-                maximum_age=timedelta(
-                    seconds=float(self.config.strategy.maximum_data_age_seconds)
-                ),
+                maximum_age=timedelta(seconds=float(self.config.strategy.maximum_data_age_seconds)),
             )
             managed = ManagedPosition(
                 symbol=position.logical_symbol,
