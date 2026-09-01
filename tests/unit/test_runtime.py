@@ -5,22 +5,31 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 from catalyst.adapters.guarded_demo_broker import GuardedDemoBroker
+from catalyst.adapters.mt5_exit import MT5ExitAdapter, MT5ManagedPosition
 from catalyst.config import RuntimeConfig
 from catalyst.controls import LocalKillSwitch
-from catalyst.domain.enums import AccountMode, EventImportance, EventStatus
-from catalyst.domain.models import AccountSnapshot, BrokerContract, EconomicEvent
+from catalyst.domain.enums import AccountMode, Direction, EventImportance, EventStatus
+from catalyst.domain.models import AccountSnapshot, BrokerContract, EconomicEvent, TradePlan
 from catalyst.ports.broker import OrderReceipt
 from catalyst.ports.reconciliation import BrokerOrderLookup, BrokerOrderState
-from catalyst.replay.models import CrossAssetRule, RawBar, RawTick
+from catalyst.replay.models import (
+    CrossAssetRule,
+    FeatureEvidence,
+    FeatureStatus,
+    RawBar,
+    RawTick,
+)
 from catalyst.runtime import (
     CatalystRuntime,
     LivePrimaryRules,
     LiveRuntimeConfig,
+    PositionStateStore,
     load_live_runtime_config,
 )
 
 NOW = datetime(2030, 1, 10, 13, 32, 10, tzinfo=UTC)
 EVENT_AT = datetime(2030, 1, 10, 13, 30, tzinfo=UTC)
+EXIT_AT = EVENT_AT + timedelta(hours=2)
 
 
 def event() -> EconomicEvent:
@@ -68,6 +77,40 @@ def contract() -> BrokerContract:
         volume_step=Decimal("0.1"),
         commission_per_volume=Decimal("0.01"),
         slippage_ticks=Decimal("1"),
+    )
+
+
+def plan() -> TradePlan:
+    return TradePlan(
+        decision_id="decision-live-1",
+        event_id="LIVE_EVENT_001",
+        strategy_id="event_reaction_retest_v1",
+        symbol="PRIMARY",
+        direction=Direction.LONG,
+        created_at=NOW,
+        entry=Decimal("101.4"),
+        stop=Decimal("95.0"),
+        risk_amount=Decimal("50"),
+        maximum_loss=Decimal("45"),
+        quantity=Decimal("0.5"),
+        configuration_hash="a" * 64,
+        rationale=("runtime test",),
+    )
+
+
+def evidence() -> FeatureEvidence:
+    return FeatureEvidence(
+        status=FeatureStatus.READY,
+        pre_event_high=Decimal("100.0"),
+        pre_event_low=Decimal("95.0"),
+        baseline_spread=Decimal("0.2"),
+        atr=Decimal("4.8"),
+        breakout_direction=Direction.LONG,
+        breakout_at=EVENT_AT + timedelta(seconds=90),
+        retest_at=EVENT_AT + timedelta(minutes=2),
+        hold_at=NOW,
+        votes=(),
+        reason="runtime test evidence",
     )
 
 
@@ -128,9 +171,9 @@ class FakeDelegate:
             raise RuntimeError("unknown symbol")
         return contract()
 
-    def submit_bracket(self, plan):
+    def submit_bracket(self, trade_plan):
         self.submissions += 1
-        return OrderReceipt(True, plan.decision_id, "B1", "ACCEPTED", "accepted")
+        return OrderReceipt(True, trade_plan.decision_id, "B1", "ACCEPTED", "accepted")
 
     def lookup_order(self, intent):
         return BrokerOrderLookup(BrokerOrderState.NOT_FOUND, None, "not found")
@@ -217,6 +260,43 @@ class FakeMarketData:
         return (self.bar,)
 
 
+class FreshExitMarketData:
+    def latest_tick(self, symbol, *, at, maximum_age):
+        return tick(symbol, at, "102.0", "102.2", 1)
+
+
+class FakeExitAdapter:
+    decision_comment = staticmethod(MT5ExitAdapter.decision_comment)
+
+    def __init__(self, positions: tuple[MT5ManagedPosition, ...]) -> None:
+        self.positions = positions
+        self.close_reasons: list[str] = []
+
+    def managed_positions(self):
+        return self.positions
+
+    def close_position(self, position, *, reason):
+        self.close_reasons.append(reason)
+        self.positions = tuple(
+            item
+            for item in self.positions
+            if item.broker_position_id != position.broker_position_id
+        )
+        return OrderReceipt(True, f"exit:{position.broker_position_id}", "EXIT-1", "DONE", "closed")
+
+
+def managed_position() -> MT5ManagedPosition:
+    return MT5ManagedPosition(
+        broker_position_id="77",
+        logical_symbol="PRIMARY",
+        direction=Direction.LONG,
+        volume=Decimal("0.5"),
+        price_open=Decimal("101.4"),
+        stop=Decimal("95.0"),
+        comment=MT5ExitAdapter.decision_comment("decision-live-1"),
+    )
+
+
 def live_config() -> LiveRuntimeConfig:
     return LiveRuntimeConfig(
         primaries={
@@ -247,6 +327,28 @@ class RuntimeTests(TestCase):
             path.write_text('{"poll_seconds":1}', encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_live_runtime_config(path)
+
+    def test_position_state_round_trip_and_discard(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "positions.json"
+            store = PositionStateStore(path)
+            comment = MT5ExitAdapter.decision_comment(plan().decision_id)
+            store.record(plan(), evidence(), session_cutoff=EXIT_AT, comment=comment)
+            restored = PositionStateStore(path)
+            spec = restored.get(comment)
+            self.assertIsNotNone(spec)
+            assert spec is not None
+            self.assertEqual(spec.initial_stop, Decimal("95.0"))
+            self.assertEqual(spec.session_cutoff, EXIT_AT)
+            restored.discard(comment)
+            self.assertIsNone(PositionStateStore(path).get(comment))
+
+    def test_corrupt_position_state_fails_closed(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "positions.json"
+            path.write_text("not-json", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unreadable"):
+                PositionStateStore(path)
 
     def test_shadow_cycle_builds_same_pipeline_plan_without_submitting(self) -> None:
         with TemporaryDirectory() as directory:
@@ -314,3 +416,55 @@ class RuntimeTests(TestCase):
             )
             self.assertEqual(runtime.active_events(NOW), (event(),))
             self.assertEqual(runtime.active_events(NOW + timedelta(hours=1)), ())
+
+    def test_auto_demo_closes_managed_position_at_session_cutoff(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = PositionStateStore(Path(directory) / "positions.json")
+            position = managed_position()
+            store.record(
+                plan(),
+                evidence(),
+                session_cutoff=EXIT_AT,
+                comment=position.comment,
+            )
+            exits = FakeExitAdapter((position,))
+            journal = FakeJournal()
+            runtime = CatalystRuntime(
+                config=RuntimeConfig(),
+                live_config=live_config(),
+                journal=journal,
+                broker=GuardedDemoBroker(
+                    FakeDelegate(),
+                    LocalKillSwitch(Path(directory) / "kill.json"),
+                ),
+                market_data=FreshExitMarketData(),
+                events=(event(),),
+                auto_demo=True,
+                exit_adapter=exits,
+                position_store=store,
+            )
+            self.assertEqual(runtime.cycle(now=EXIT_AT), ())
+            self.assertEqual(exits.close_reasons, ["session_cutoff"])
+            self.assertIsNone(store.get(position.comment))
+            self.assertEqual(journal.heartbeats[-1]["status"], "position_exit")
+
+    def test_untracked_catalyst_position_is_closed_reduce_risk(self) -> None:
+        with TemporaryDirectory() as directory:
+            position = managed_position()
+            exits = FakeExitAdapter((position,))
+            runtime = CatalystRuntime(
+                config=RuntimeConfig(),
+                live_config=live_config(),
+                journal=FakeJournal(),
+                broker=GuardedDemoBroker(
+                    FakeDelegate(),
+                    LocalKillSwitch(Path(directory) / "kill.json"),
+                ),
+                market_data=FreshExitMarketData(),
+                events=(event(),),
+                auto_demo=True,
+                exit_adapter=exits,
+                position_store=PositionStateStore(Path(directory) / "positions.json"),
+            )
+            runtime.cycle(now=EXIT_AT)
+            self.assertEqual(exits.close_reasons, ["untracked_managed_position"])
