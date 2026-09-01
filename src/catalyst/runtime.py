@@ -10,6 +10,7 @@ explicitly armed through the operator control plane.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -100,7 +101,11 @@ def load_live_runtime_config(path: str | Path) -> LiveRuntimeConfig:
             raise ValueError(f"primary {primary} related must be a non-empty array")
         related: list[CrossAssetRule] = []
         for index, item in enumerate(related_raw):
-            if not isinstance(item, dict) or set(item) != {"symbol", "polarity", "minimum_move"}:
+            if not isinstance(item, dict) or set(item) != {
+                "symbol",
+                "polarity",
+                "minimum_move",
+            }:
                 raise ValueError(f"primary {primary} related[{index}] has an invalid schema")
             symbol = item["symbol"]
             polarity = item["polarity"]
@@ -213,7 +218,8 @@ class CatalystRuntime:
                     submission = self._handle_decision(event, decision, now)
                     results.append(RuntimeCycleResult(event.event_id, symbol, decision, submission))
                 except Exception as exc:
-                    self.broker.disarm() if self.auto_demo else None
+                    if self.auto_demo:
+                        self.broker.disarm()
                     self._heartbeat(
                         now=now,
                         status="runtime_error",
@@ -310,7 +316,8 @@ class CatalystRuntime:
         now: datetime,
     ) -> DurableSubmissionResult | None:
         code = str(decision.code)
-        signature = (event.event_id, decision.setup.direction.value if decision.setup.direction else "none", code)
+        direction = decision.setup.direction.value if decision.setup.direction else "none"
+        signature = (event.event_id, direction, code)
         if signature not in self._reported:
             self._reported.add(signature)
             self._heartbeat(
@@ -343,17 +350,15 @@ class CatalystRuntime:
         decision: PipelineDecision,
         now: datetime,
     ) -> None:
-        try:
+        # A stable plan identity may already have been persisted by a previous
+        # poll or process. DurableDemoExecutor then enforces at-most-once send.
+        with suppress(JournalConflictError):
             self.journal.record_decision(
                 event_id=event.event_id,
                 decision_id=plan.decision_id,
                 decision=decision,
                 occurred_at=now,
             )
-        except JournalConflictError:
-            # A stable plan identity may already have been persisted by a previous
-            # poll or process. DurableDemoExecutor then enforces at-most-once send.
-            pass
 
     def _heartbeat(self, *, now: datetime, status: str, details: Mapping[str, Any]) -> None:
         self.journal.record_heartbeat(
