@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from json import dumps, loads
 from pathlib import Path
@@ -69,9 +69,15 @@ class RuntimeRiskTracker:
         stored_day = stored.get("day")
         stored_month = stored.get("month")
         try:
-            day_start = Decimal(str(stored["day_start_equity"])) if stored_day == day_key else equity
+            day_start = (
+                Decimal(str(stored["day_start_equity"]))
+                if stored_day == day_key
+                else equity
+            )
             month_start = (
-                Decimal(str(stored["month_start_equity"])) if stored_month == month_key else equity
+                Decimal(str(stored["month_start_equity"]))
+                if stored_month == month_key
+                else equity
             )
         except (KeyError, ValueError):
             day_start = equity
@@ -119,7 +125,9 @@ class RuntimeRiskTracker:
 
 
 def _argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run CATALYST against a verified MT5 demo account")
+    parser = argparse.ArgumentParser(
+        description="Run CATALYST against a verified MT5 demo account"
+    )
     parser.add_argument(
         "--config",
         default=os.environ.get("CATALYST_CONFIG_PATH", "config/settings.example.toml"),
@@ -135,7 +143,11 @@ def _argument_parser() -> argparse.ArgumentParser:
         default=os.environ.get("CATALYST_EVENT_CSV", "config/events.example.csv"),
         help="strict UTC manual event CSV",
     )
-    parser.add_argument("--auto-demo", action="store_true", help="allow demo orders after explicit arm")
+    parser.add_argument(
+        "--auto-demo",
+        action="store_true",
+        help="allow demo orders after explicit arm",
+    )
     parser.add_argument("--once", action="store_true", help="run one polling cycle and exit")
     parser.add_argument(
         "--preflight-only",
@@ -278,7 +290,9 @@ def main() -> None:
                 reason="catalyst-run explicit demo-auto startup",
             )
             if not arm_result.accepted:
-                raise RuntimeError(f"demo-auto arm failed: {arm_result.code}: {arm_result.message}")
+                raise RuntimeError(
+                    f"demo-auto arm failed: {arm_result.code}: {arm_result.message}"
+                )
             print("runtime_mode=demo_auto armed=true")
         else:
             print("runtime_mode=shadow armed=false orders_sent=0")
